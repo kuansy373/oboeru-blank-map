@@ -19,3 +19,35 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+The following third-party components are included under their respective licenses.
+
+1. MapLibre GL JS
+   - BSD-3-Clause license
+   - Copyright (c) 2023, MapLibre contributors
+   - https://github.com/maplibre/maplibre-gl-js/blob/main/LICENSE.txt
+   - Files used:
+     - https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js
+     - https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css
+
+2. MapLibre Demo Fonts
+   - License: BSD-3-Clause License (as distributed via demotiles.maplibre.org)
+   - Source: https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf
+   - Provided by MapLibre project for demonstration purposes
+
+3. Turf.js
+   - MIT License
+   - Copyright (c) 2019 Morgan Herlocker
+   - https://github.com/Turfjs/turf/blob/master/LICENSE
+
+4. Geo data
+
+   -1. geo-countries
+      - All data is licensed under the Open Data Commons Public Domain Dedication and License.
+      - https://github.com/datasets/geo-countries
+    
+   -2. geo-admin1-us
+      - All data is licensed under the Open Data Commons Public Domain Dedication and License.
+      - https://github.com/datasets/geo-admin1-us
