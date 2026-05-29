@@ -14,6 +14,8 @@ map.doubleClickZoom.disable();
 map.dragRotate.disable();
 map.touchZoomRotate.disableRotation();
 
+var mapContainer = document.getElementById('bm-worldmap');
+
 // GeoJSONデータを保持するオブジェクト
 var geojsonData = {};
 
@@ -63,7 +65,7 @@ Object.assign(searchContainer.style, {
   boxShadow: '0 2px 4px rgba(0,0,0,0.2)',
   minWidth: '200px'
 });
-container.appendChild(searchContainer);
+mapContainer.appendChild(searchContainer);
 
 // 検索ボックスのラッパー（相対配置用）
 var searchWrapper = document.createElement('div');
@@ -889,7 +891,7 @@ document.addEventListener('click', function() {
 // コンテナ組み立て
 mapBtnContainer.appendChild(mapButton);
 mapBtnContainer.appendChild(layerControl);
-container.appendChild(mapBtnContainer);
+mapContainer.appendChild(mapBtnContainer);
 
 // 地域ボタンの親コンテナ作成
 var regionBtnContainer = document.createElement('div');
@@ -1051,4 +1053,4 @@ document.addEventListener('click', function() {
 // コンテナ組み立て
 regionBtnContainer.appendChild(regionButton);
 regionBtnContainer.appendChild(regionControl);
-container.appendChild(regionBtnContainer);
+mapContainer.appendChild(regionBtnContainer);
