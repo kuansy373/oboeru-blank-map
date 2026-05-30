@@ -1,4 +1,8 @@
-var map = new maplibregl.Map({
+// ============================================================
+// 定数・状態管理
+// ============================================================
+
+const map = new maplibregl.Map({
   container: 'bm-worldmap',
   style: {
     version: 8,
@@ -10,332 +14,357 @@ var map = new maplibregl.Map({
   zoom: 1,
   attributionControl: false
 });
+
 map.doubleClickZoom.disable();
 map.dragRotate.disable();
 map.touchZoomRotate.disableRotation();
 
-var mapContainer = document.getElementById('bm-worldmap');
+// レイヤー順（下から上）
+const LAYER_ORDER = ['world', 'usaStates', 'capitals'];
 
 // GeoJSONデータを保持するオブジェクト
-var geojsonData = {};
+const geojsonData = {};
 
-// 色塗り管理オブジェクト
-var filledFeatures = {};
+// 色塗り管理オブジェクト: { [featureId]: { color, layerId } }
+const filledFeatures = {};
 
-// nameの前後の空白を削除し、小文字に変換する関数
+// 国リストの開閉状態を保持
+const expandedLists = {};
+
+// ハイライトされた経線・緯線の管理 Map: key=uniqueId, value={ layerId, sourceId, degree }
+const highlightedLines = new Map();
+
+// ============================================================
+// DOM参照
+// ============================================================
+
+const mapContainer    = document.getElementById('bm-worldmap');
+const mapBtnContainer = document.getElementById('map-btn-container');
+const mapButton       = document.getElementById('map-button');
+const layerControl    = document.getElementById('layer-control');
+const regionBtnContainer = document.getElementById('region-btn-container');
+const regionButton    = document.getElementById('region-button');
+const regionControl   = document.getElementById('region-control');
+const searchInput     = document.getElementById('search-input');
+const clearButton     = document.getElementById('clear-button');
+const progressDisplay = document.getElementById('progress-display');
+
+// ============================================================
+// ユーティリティ関数
+// ============================================================
+
+/** 文字列を正規化（前後空白除去・小文字化） */
 function normalize(name) {
   return name.trim().toLowerCase();
 }
 
-// 地域判定関数（簡素化版）
+/** フィーチャのプロパティから地域名を返す */
 function getRegion(properties) {
-  // state_codeがあればUSA Statesリストで確認
   if (properties.state_code && countryRegions['USA States'].includes(properties.state_code)) {
     return 'USA States';
   }
-
-  // ISO3166-1-Alpha-2やnameで判定
-  var isoCode = properties['name'] || properties['ISO3166-1-Alpha-2'];
+  const isoCode = properties['name'] || properties['ISO3166-1-Alpha-2'];
   if (isoCode) {
     for (const [region, list] of Object.entries(countryRegions)) {
       if (list.includes(isoCode)) return region;
     }
   }
-
-  // nameで正規化して判定
-  var name = properties.name || '';
-  var n = normalize(name);
+  const n = normalize(properties.name || '');
   for (const [region, list] of Object.entries(countryRegions)) {
     if (list.some(c => normalize(c) === n)) return region;
   }
-
   return 'Default';
 }
 
-// 検索ボックスとプログレス表示エリア
-var searchContainer = document.createElement('div');
-searchContainer.className = 'search-container';
-mapContainer.appendChild(searchContainer);
+/** フィーチャIDを取得（usaStates は state_code、それ以外は name） */
+function getFeatureId(key, feature) {
+  return key === 'usaStates'
+    ? feature.properties.state_code
+    : (feature.properties['name'] || feature.id || feature.properties.id);
+}
 
-// 検索ボックスのラッパー（相対配置用）
-var searchWrapper = document.createElement('div');
-searchWrapper.className = 'search-wrapper';
-searchContainer.appendChild(searchWrapper);
+/** 名前またはコードからフィーチャを検索 */
+function findFeatureByName(name, sources = LAYER_ORDER) {
+  const n = normalize(name);
+  for (const sourceKey of sources) {
+    const data = geojsonData[sourceKey];
+    if (!data?.features) continue;
+    for (const feature of data.features) {
+      const props = feature.properties;
+      const candidates = [
+        props.name, props.NAME, props.ADMIN, props.ADMIN_EN,
+        props.state_code, props['ISO3166-1-Alpha-2']
+      ].map(v => normalize(v || ''));
+      if (candidates.includes(n)) return feature;
+    }
+  }
+  return null;
+}
 
-var searchInput = document.createElement('input');
-searchInput.type = 'text';
-searchInput.placeholder = 'Type region names...';
-searchInput.className = 'search-input';
-searchWrapper.appendChild(searchInput);
+// ============================================================
+// 色塗り操作
+// ============================================================
 
-// クリアボタン（入力欄内部の右端）
-var clearButton = document.createElement('button');
-clearButton.textContent = '✕';
-clearButton.className = 'clear-button';
-clearButton.addEventListener('click', function() {
-  searchInput.value = '';
-  updateProgress();
-  // searchInput.focus();
-});
-searchWrapper.appendChild(clearButton);
-var progressDisplay = document.createElement('div');
-progressDisplay.id = 'progress-display';
-progressDisplay.className = 'progress-display';
-searchContainer.appendChild(progressDisplay);
+/** フィーチャに色を塗り、filledFeatures に登録する */
+function fillFeature(key, featureId, color) {
+  filledFeatures[featureId] = { color, layerId: key };
+  map.setFeatureState({ source: key, id: featureId }, { fillColor: color });
+}
 
-// 国リストの開閉状態を保持
-var expandedLists = {};
+/** フィーチャの色塗りを解除し、filledFeatures から削除する */
+function clearFeature(key, featureId) {
+  delete filledFeatures[featureId];
+  map.removeFeatureState({ source: key, id: featureId });
+}
 
-// 進捗を更新する関数
+/** ある地域に属する全フィーチャに対して操作を行う共通処理 */
+function applyToRegionFeatures(region, callback) {
+  LAYER_ORDER.forEach(key => {
+    const source = map.getSource(key);
+    if (!source) return;
+    source._data.features.forEach(f => {
+      if (getRegion(f.properties) !== region) return;
+      const fId = getFeatureId(key, f);
+      if (fId) callback(key, fId, f);
+    });
+  });
+}
+
+// ============================================================
+// マップ操作
+// ============================================================
+
+/** 座標を 0–360° 系にシフトする補助関数 */
+function shiftGeometry(coords, type) {
+  const shift = c => [c[0] < 0 ? c[0] + 360 : c[0], c[1]];
+  if (type === 'Point')                          return shift(coords);
+  if (type === 'LineString' || type === 'MultiPoint')  return coords.map(shift);
+  if (type === 'Polygon'    || type === 'MultiLineString') return coords.map(ring => ring.map(shift));
+  if (type === 'MultiPolygon') return coords.map(poly => poly.map(ring => ring.map(shift)));
+  return coords;
+}
+
+/** フィーチャにズームインする */
+function zoomToFeature(feature) {
+  if (!feature?.geometry) return;
+
+  const bbox = turf.bbox(feature.geometry);
+  const [minLng, , maxLng] = bbox;
+  let center;
+
+  if (maxLng - minLng > 180) {
+    // 日付変更線をまたぐ場合：0–360° 系で中心を求めてから戻す
+    const shifted = { type: feature.geometry.type, coordinates: shiftGeometry(feature.geometry.coordinates, feature.geometry.type) };
+    const sb = turf.bbox(shifted);
+    const cx = (sb[0] + sb[2]) / 2;
+    center = [cx > 180 ? cx - 360 : cx, (sb[1] + sb[3]) / 2];
+  } else {
+    center = turf.centroid(feature.geometry).geometry.coordinates;
+  }
+
+  const area = turf.area(feature.geometry) / 1_000_000;
+  const zoomLevels = [
+    [5_000_000, 3], [1_000_000, 4], [100_000, 5], [10_000, 6],
+    [1_000, 7], [100, 8], [10, 9], [5, 10], [1, 11], [0.5, 12], [0.1, 13], [0.05, 14]
+  ];
+  const zoom = zoomLevels.find(([t]) => area > t)?.[1] ?? 15;
+  map.flyTo({ center, zoom, duration: 1000 });
+}
+
+/** レイヤーの表示・非表示を切り替える */
+function setLayerVisibility(key, visible) {
+  const visibility = visible ? 'visible' : 'none';
+  ['fill', 'line'].forEach(type => {
+    const layerId = `${key}-${type}`;
+    if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visibility);
+  });
+}
+
+/** レイヤーの重ね順を整理する（LAYER_ORDER 順に再配置） */
+function reorderLayers() {
+  LAYER_ORDER.forEach(key => {
+    ['fill', 'line'].forEach(type => {
+      const layerId = `${key}-${type}`;
+      if (map.getLayer(layerId)) map.moveLayer(layerId);
+    });
+  });
+}
+
+// ============================================================
+// GeoJSONロード
+// ============================================================
+
+function loadLayer(key, url) {
+  fetch(url)
+    .then(res => res.json())
+    .then(data => {
+      geojsonData[key] = data;
+
+      map.addSource(key, {
+        type: 'geojson',
+        data,
+        promoteId: key === 'usaStates' ? 'state_code' : 'name'
+      });
+
+      map.addLayer({
+        id: `${key}-fill`,
+        type: 'fill',
+        source: key,
+        paint: {
+          'fill-color': ['case', ['!=', ['feature-state', 'fillColor'], null], ['feature-state', 'fillColor'], '#eaeaea'],
+          'fill-opacity': 1
+        }
+      });
+
+      map.addLayer({
+        id: `${key}-line`,
+        type: 'line',
+        source: key,
+        paint: { 'line-color': '#888', 'line-width': 1 }
+      });
+
+      // world のみ初期表示、他は非表示
+      if (key !== 'world') setLayerVisibility(key, false);
+      else document.getElementById(`layer_${key}`).checked = true;
+    })
+    .catch(err => console.error('GeoJSON load failed for', key, err));
+}
+
+// ============================================================
+// 経線・緯線
+// ============================================================
+
+function generateMeridiansParallels() {
+  const meridians = { type: 'FeatureCollection', features: [] };
+  const parallels = { type: 'FeatureCollection', features: [] };
+
+  for (let lon = -180; lon <= 180; lon += 10) {
+    meridians.features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[lon, -90], [lon, 90]] }, properties: {} });
+  }
+  for (let lat = -90; lat <= 90; lat += 10) {
+    parallels.features.push({ type: 'Feature', geometry: { type: 'LineString', coordinates: [[-180, lat], [180, lat]] }, properties: {} });
+  }
+  return { meridians, parallels };
+}
+
+function addGridLayers(gridData) {
+  ['meridians', 'parallels'].forEach(key => {
+    map.addSource(key, { type: 'geojson', data: gridData[key] });
+
+    map.addLayer({
+      id: `${key}-line-hitarea`,
+      type: 'line',
+      source: key,
+      paint: { 'line-color': 'rgba(0,0,0,0)', 'line-width': 10 },
+      layout: { visibility: 'none' }
+    });
+
+    map.addLayer({
+      id: `${key}-line`,
+      type: 'line',
+      source: key,
+      paint: { 'line-color': '#888', 'line-width': 1 },
+      layout: { visibility: 'none' }
+    });
+  });
+}
+
+// ============================================================
+// 進捗表示
+// ============================================================
+
 function updateProgress() {
   // 各リストのスクロール位置を保存
-  var scrollPositions = {};
+  const scrollPositions = {};
   progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
     scrollPositions[list.id] = list.scrollTop;
   });
 
-  var searchQuery = searchInput.value.trim();
+  const searchQuery = searchInput.value.trim();
+  if (!searchQuery) { progressDisplay.innerHTML = ''; return; }
 
-  if (!searchQuery) {
-    progressDisplay.innerHTML = '';
-    return;
-  }
+  const searchTerms = searchQuery.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+  if (searchTerms.length === 0) { progressDisplay.innerHTML = ''; return; }
 
-  // コンマ区切りで複数検索に対応
-  var searchTerms = searchQuery.split(',').map(term => term.trim().toLowerCase()).filter(term => term);
-
-  if (searchTerms.length === 0) {
-    progressDisplay.innerHTML = '';
-    return;
-  }
-
-  // 地域名の部分一致検索（Defaultも含む）
-  var allRegions = Object.keys(countryRegions).concat(['Default']);
-  var matchedRegions = [];
-
-  searchTerms.forEach(searchTerm => {
-    allRegions.forEach(region => {
-      if (region.toLowerCase().includes(searchTerm) && !matchedRegions.includes(region)) {
-        matchedRegions.push(region);
-      }
-    });
-  });
+  const allRegions = [...Object.keys(countryRegions), 'Default'];
+  const matchedRegions = allRegions.filter(region =>
+    searchTerms.some(term => region.toLowerCase().includes(term))
+  );
 
   if (matchedRegions.length === 0) {
     progressDisplay.innerHTML = '<div style="color:#999; margin-top:8px;">No matching regions.</div>';
     return;
   }
 
-  var html = '';
-  matchedRegions.forEach(region => {
-    var totalCount = 0;
-    var filledCount = 0;
-    var countryList = [];
-
-    if (region === 'Default') {
-      // GeoJSONデータから直接Defaultに属する地物を取得
-      var defaultFeatures = [];
-
-      // worldレイヤーから取得
-      if (geojsonData.world && geojsonData.world.features) {
-        geojsonData.world.features.forEach(feature => {
-          var props = feature.properties;
-          var featureRegion = getRegion(props);
-
-          if (featureRegion === 'Default') {
-            var id = props.name || feature.id;
-            defaultFeatures.push(id);
-          }
-        });
-      }
-
-      // capitalsから取得
-      if (geojsonData.capitals && geojsonData.capitals.features) {
-        geojsonData.capitals.features.forEach(feature => {
-          var props = feature.properties;
-          var featureRegion = getRegion(props);
-
-          if (featureRegion === 'Default') {
-            var id = props.name || feature.id;
-            defaultFeatures.push(id);
-          }
-        });
-      }
-
-      totalCount = defaultFeatures.length;
-
-      // 各Default地物の塗りつぶし状態をチェック
-      defaultFeatures.forEach(id => {
-        var isFilled = Object.keys(filledFeatures).some(filledId => {
-          return normalize(id) === normalize(filledId) || id === filledId;
-        });
-
-        if (isFilled) {
-          filledCount++;
+  // 地域ごとの国リストを構築
+  function buildCountryList(region) {
+    if (region !== 'Default') {
+      return countryRegions[region].map(country => {
+        let displayName = country;
+        if (region === 'USA States' && geojsonData.usaStates?.features) {
+          const match = geojsonData.usaStates.features.find(f => f.properties.state_code === country);
+          if (match?.properties.name) displayName = match.properties.name;
         }
-
-        countryList.push({ name: id, filled: isFilled });
+        const filled = Object.keys(filledFeatures).some(id => normalize(country) === normalize(id) || country === id);
+        return { name: displayName, code: country, filled };
       });
-    } else {
-      // 通常の地域（USA Statesを含む）
-      var regionCountries = countryRegions[region];
-      totalCount = regionCountries.length;
-
-      regionCountries.forEach(country => {
-        var isFilled = Object.keys(filledFeatures).some(id => {
-          return normalize(country) === normalize(id) || country === id;
-        });
-
-        if (isFilled) {
-          filledCount++;
-        }
-
-        var displayName = country; // デフォルトはコードそのまま
-
-        // region が USA States の場合、usaStates データから name を取得
-        if (region === 'USA States' && geojsonData.usaStates && geojsonData.usaStates.features) {
-          var match = geojsonData.usaStates.features.find(f => f.properties.state_code === country);
-          if (match && match.properties.name) {
-            displayName = match.properties.name;
-          }
-        }
-
-        countryList.push({ name: displayName, filled: isFilled });
-      });
-
     }
 
-    var color = regionColors[region] || regionColors.Default;
-    var listId = 'country-list-' + region.replace(/\s+/g, '-');
-    var isExpanded = expandedLists[region] || false;
-    var unfilledCountries = countryList.filter(c => !c.filled);
+    // Default 地域：GeoJSONから直接収集
+    const defaultIds = new Set();
+    ['world', 'capitals'].forEach(key => {
+      geojsonData[key]?.features?.forEach(f => {
+        if (getRegion(f.properties) === 'Default') {
+          defaultIds.add(f.properties.name || f.id);
+        }
+      });
+    });
 
-    html += `
+    return [...defaultIds].map(id => ({
+      name: id,
+      code: id,
+      filled: Object.keys(filledFeatures).some(fid => normalize(id) === normalize(fid) || id === fid)
+    }));
+  }
+
+  const html = matchedRegions.map(region => {
+    const countryList = buildCountryList(region);
+    const filledCount = countryList.filter(c => c.filled).length;
+    const totalCount  = countryList.length;
+    const color       = regionColors[region] || regionColors.Default;
+    const listId      = `country-list-${region.replace(/\s+/g, '-')}`;
+    const isExpanded  = expandedLists[region] || false;
+    const hasUnfilled = countryList.some(c => !c.filled);
+
+    return `
       <div class="region-progress-wrapper">
         <div class="region-progress-header">
-          <div class="region-progress" data-region="${region}" style="cursor:${unfilledCountries.length > 0 ? 'pointer' : 'default'};">
+          <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
             <div class="region-progress-name" style="color:${color};">${region}</div>
             <div class="region-progress-count">${filledCount} / ${totalCount}</div>
           </div>
           <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
         </div>
         <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
-          ${countryList.map(country => {
-            var countryColor = country.filled ? color : '#aaa';
-            return `<div style="color:${countryColor};">${country.name}</div>`;
-          }).join('')}
+          ${countryList.map(c => `<div style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
         </div>
       </div>
     `;
-  });
+  }).join('');
 
   progressDisplay.innerHTML = html;
 
   // スクロール位置を復元
   progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
-    if (scrollPositions[list.id] !== undefined) {
-      list.scrollTop = scrollPositions[list.id];
-    }
+    if (scrollPositions[list.id] !== undefined) list.scrollTop = scrollPositions[list.id];
   });
 
-  // ▼ 共通ズーム関数
-  function zoomToFeature(feature) {
-    if (!feature || !feature.geometry) return;
-
-    // 日付変更線を跨ぐ国の検出と補正
-    const bbox = turf.bbox(feature.geometry);
-    const [minLng, minLat, maxLng, maxLat] = bbox;
-
-    let center, zoom;
-
-    // 経度の差が大きい場合は日付変更線を跨いでいる可能性
-    if (maxLng - minLng > 180) {
-      // 座標を0-360度系に変換して中心を計算
-      const shiftedGeometry = {
-        type: feature.geometry.type,
-        coordinates: shiftGeometry(feature.geometry.coordinates, feature.geometry.type)
-      };
-      const shiftedBbox = turf.bbox(shiftedGeometry);
-      const shiftedCenter = [
-        (shiftedBbox[0] + shiftedBbox[2]) / 2,
-        (shiftedBbox[1] + shiftedBbox[3]) / 2
-      ];
-      // -180〜180度系に戻す
-      center = [
-        shiftedCenter[0] > 180 ? shiftedCenter[0] - 360 : shiftedCenter[0],
-        shiftedCenter[1]
-      ];
-    } else {
-      // 通常の中心点計算
-      const centroid = turf.centroid(feature.geometry);
-      center = centroid.geometry.coordinates;
-    }
-
-    const area = turf.area(feature.geometry) / 1_000_000;
-    const zoomLevels = [
-      [5_000_000, 3], [1_000_000, 4], [100_000, 5], [10_000, 6],
-      [1_000, 7], [100, 8], [10, 9], [5, 10], [1, 11],
-      [0.5, 12], [0.1, 13], [0.05, 14]
-    ];
-    zoom = zoomLevels.find(([threshold]) => area > threshold)?.[1] || 15;
-    map.flyTo({ center, zoom, duration: 1000 });
-  }
-
-  // ▼ 座標を0-360度系にシフトする補助関数
-  function shiftGeometry(coords, type) {
-    if (type === 'Point') {
-      return [coords[0] < 0 ? coords[0] + 360 : coords[0], coords[1]];
-    } else if (type === 'LineString' || type === 'MultiPoint') {
-      return coords.map(c => [c[0] < 0 ? c[0] + 360 : c[0], c[1]]);
-    } else if (type === 'Polygon' || type === 'MultiLineString') {
-      return coords.map(ring => ring.map(c => [c[0] < 0 ? c[0] + 360 : c[0], c[1]]));
-    } else if (type === 'MultiPolygon') {
-      return coords.map(poly => poly.map(ring => ring.map(c => [c[0] < 0 ? c[0] + 360 : c[0], c[1]])));
-    }
-    return coords;
-  }
-
-  // ▼ 名前またはコードからフィーチャを検索
-  function findFeatureByName(name, sources = ['world', 'usaStates', 'capitals']) {
-    const n = normalize(name);
-    for (const sourceKey of sources) {
-      const data = geojsonData[sourceKey];
-      if (!data || !data.features) continue;
-      for (const feature of data.features) {
-        const props = feature.properties;
-        const names = [
-          props.name, props.NAME, props.ADMIN, props.ADMIN_EN,
-          props.state_code, props['ISO3166-1-Alpha-2']
-        ].map(v => (v || '').trim().toLowerCase());
-        if (names.includes(n)) return feature;
-      }
-    }
-    return null;
-  }
-
-  // ▼ 地域クリック（ランダム未塗り国ズーム）
+  // 地域クリック：ランダムな未塗り国へズーム
   progressDisplay.querySelectorAll('.region-progress').forEach(elem => {
     elem.addEventListener('click', () => {
       const region = elem.dataset.region;
-      const unfilled = [];
-
-      if (region === 'Default') {
-        (geojsonData.world?.features || []).forEach(f => {
-          if (getRegion(f.properties) === 'Default') {
-            const id = f.properties.name || f.id;
-            if (!Object.keys(filledFeatures).some(fid => normalize(fid) === normalize(id))) {
-              unfilled.push(id);
-            }
-          }
-        });
-      } else {
-        (countryRegions[region] || []).forEach(c => {
-          if (!Object.keys(filledFeatures).some(fid => normalize(fid) === normalize(c))) {
-            unfilled.push(c);
-          }
-        });
-      }
-
+      const countryList = buildCountryList(region);
+      const unfilled = countryList.filter(c => !c.filled).map(c => c.code);
       if (unfilled.length === 0) return;
       const randomName = unfilled[Math.floor(Math.random() * unfilled.length)];
       const feature = findFeatureByName(randomName, region === 'USA States' ? ['usaStates'] : undefined);
@@ -343,613 +372,264 @@ function updateProgress() {
     });
   });
 
-  // ▼ 各国クリックでズーム
-  progressDisplay.querySelectorAll('#progress-display div[id^="country-list-"] div').forEach(elem => {
+  // 国名クリック：その国へズーム
+  progressDisplay.querySelectorAll('[id^="country-list-"] div').forEach(elem => {
     elem.style.cursor = 'pointer';
-    elem.addEventListener('mouseenter', () => {
-      elem.dataset.originalColor = elem.style.color || getComputedStyle(elem).color;
-      elem.style.color = '#000';
-    });
-    elem.addEventListener('mouseleave', () => {
-      if (elem.dataset.originalColor) elem.style.color = elem.dataset.originalColor;
-    });
+    elem.addEventListener('mouseenter', () => { elem.dataset.origColor = elem.style.color; elem.style.color = '#000'; });
+    elem.addEventListener('mouseleave', () => { if (elem.dataset.origColor) elem.style.color = elem.dataset.origColor; });
     elem.addEventListener('click', e => {
       e.stopPropagation();
       const countryName = elem.textContent.trim();
       const regionId = elem.closest('[id^="country-list-"]').id.replace('country-list-', '').replace(/-/g, ' ');
       const region = Object.keys(countryRegions).find(r => r.toLowerCase() === regionId.toLowerCase()) || 'Default';
-
-      const feature = findFeatureByName(
-        countryName,
-        region === 'USA States' ? ['usaStates'] : undefined
-      );
+      const feature = findFeatureByName(countryName, region === 'USA States' ? ['usaStates'] : undefined);
       if (feature) zoomToFeature(feature);
       else console.warn('国を特定できませんでした:', countryName);
     });
   });
 
-  // トグルボタンのイベントを設定
-  var toggleButtons = progressDisplay.querySelectorAll('.toggle-list-btn');
-  toggleButtons.forEach(btn => {
-    btn.addEventListener('click', function() {
-      var targetId = this.getAttribute('data-target');
-      var region = this.getAttribute('data-region');
-      var listElement = document.getElementById(targetId);
-
-      if (listElement.style.display === 'none') {
-        listElement.style.display = 'block';
-        this.textContent = '▲';
-        expandedLists[region] = true;
-      } else {
-        listElement.style.display = 'none';
-        this.textContent = '▼';
-        expandedLists[region] = false;
-      }
+  // トグルボタン：国リストの開閉
+  progressDisplay.querySelectorAll('.toggle-list-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const listEl = document.getElementById(btn.dataset.target);
+      const open   = listEl.style.display === 'none';
+      listEl.style.display = open ? 'block' : 'none';
+      btn.textContent = open ? '▲' : '▼';
+      expandedLists[btn.dataset.region] = open;
     });
   });
 }
 
-// 検索ボックスのイベント
-searchInput.addEventListener('input', updateProgress);
+// ============================================================
+// マップロード
+// ============================================================
 
-// 指定したURLからGeoJSONデータを取得
-function loadLayer(key, url) {
-  fetch(url)
-    .then(res => res.json())
-    .then(data => {
-      // GeoJSONデータを保存
-      geojsonData[key] = data;
+map.on('load', function () {
+  // GeoJSONレイヤーのロード
+  LAYER_ORDER.forEach(key => loadLayer(key, geoUrls[key]));
 
-      map.addSource(key, {
-        type: 'geojson',
-        data: data,
-        promoteId: key === 'usaStates' ? 'state_code' : 'name'
-      });
+  // 経線・緯線の追加
+  addGridLayers(generateMeridiansParallels());
 
-      // 塗りつぶしレイヤーの追加
-      map.addLayer({
-        id: key + '-fill',
-        type: 'fill',
-        source: key,
-        paint: {
-          'fill-color': [
-            'case',
-            ['!=', ['feature-state', 'fillColor'], null],
-            ['feature-state', 'fillColor'],
-            '#eaeaea'
-          ],
-          'fill-opacity': 1
-        }
-      });
-
-      // 境界線レイヤーの追加
-      map.addLayer({
-        id: key + '-line',
-        type: 'line',
-        source: key,
-        paint: {
-          'line-color': '#888',
-          'line-width': 1
-        }
-      });
-
-      // 初期表示設定（world初期表示、usaStates初期非表示）
-      if (key === 'world') {
-        document.getElementById('layer_' + key).checked = true;
-      } else {
-        map.setLayoutProperty(key + '-fill', 'visibility', 'none');
-        map.setLayoutProperty(key + '-line', 'visibility', 'none');
-      }
-    })
-    .catch(err => console.error('GeoJSON load failed for', key, err));
-}
-
-// 地図ロード
-map.on('load', function() {
-  loadLayer('world', geoUrls.world);
-  loadLayer('usaStates', geoUrls.usaStates);
-  loadLayer('capitals', geoUrls.capitals);
-
-  // レイヤー順（下から上）
-  const layerOrder = ['world', 'usaStates', 'capitals'];
-
-  // クリックイベント
-  layerOrder.forEach(key => {
-    map.on('click', key + '-fill', function (e) {
+  // ---- 国・州クリックイベント ----
+  LAYER_ORDER.forEach(key => {
+    map.on('click', `${key}-fill`, e => {
       const feature = e.features[0];
-      const props = feature.properties;
+      const props   = feature.properties;
 
-      // クリック座標から上位レイヤーを探索
-      const currentIndex = layerOrder.indexOf(key);
-      const upperLayers = layerOrder.slice(currentIndex + 1);
+      // 上位レイヤーのフィーチャがある場合は無視
+      const upperLayers = LAYER_ORDER.slice(LAYER_ORDER.indexOf(key) + 1).map(k => `${k}-fill`);
+      if (upperLayers.some(l => map.queryRenderedFeatures(e.point, { layers: [l] }).length > 0)) return;
 
-      for (const upperKey of upperLayers) {
-        const upperFillId = upperKey + '-fill';
-        if (!map.getLayer(upperFillId)) continue;
+      const featureId = getFeatureId(key, feature);
+      const id        = featureId || props.id || props.name || props.NAME;
+      const name      = props.name || props.NAME || props.ADMIN || props.ADMIN_EN || 'Unknown';
+      const region    = getRegion(props);
+      const fillColor = regionColors[region] || regionColors.Default;
 
-        // クリック地点に上位レイヤーのフィーチャがあるかを判定
-        const upperFeatures = map.queryRenderedFeatures(e.point, { layers: [upperFillId] });
-
-        if (upperFeatures.length > 0) {
-          // 上位レイヤー上をクリックしている → 下位レイヤーは無視
-          return;
-        }
-      }
-
-      var featureId = key === 'usaStates' ? props.state_code : (props['name'] || feature.id);
-      var id = featureId || props.id || props.name || props.NAME;
-      var name = props.name || props.NAME || props.ADMIN || props.ADMIN_EN || 'Unknown';
-      var region = getRegion(props);
-      var fillColor = regionColors[region] || regionColors.Default;
-
-      // クリックによる色塗り・解除
       if (!filledFeatures[id]) {
-        filledFeatures[id] = { color: fillColor, layerId: key };
-
-        map.setFeatureState(
-          { source: key, id: featureId },
-          { fillColor: fillColor }
-        );
-
-        // 進捗を更新
+        fillFeature(key, id, fillColor);
         updateProgress();
       } else {
-        // すでに塗られている地物を再クリックしたとき
-        var popupContent = `
-          <div class="popup-content">
-            <div class="popup-name">${name}</div>
-            <div class="popup-region">
-              <span>${region}</span>
-              <button id="resetColorBtn" class="popup-reset-btn">↵</button>
-            </div>
-          </div>
-        `;
-
-        // ポップアップを表示
-        var popup = new maplibregl.Popup()
+        // 塗り済みの場合：ポップアップでリセット可能にする
+        const popup = new maplibregl.Popup()
           .setLngLat(e.lngLat)
-          .setHTML(popupContent)
+          .setHTML(`
+            <div class="popup-content">
+              <div class="popup-name">${name}</div>
+              <div class="popup-region">
+                <span>${region}</span>
+                <button id="resetColorBtn" class="popup-reset-btn">↵</button>
+              </div>
+            </div>
+          `)
           .addTo(map);
 
-        // リセットボタンで色を戻す
         setTimeout(() => {
-          const btn = document.getElementById('resetColorBtn');
-          if (btn) {
-            btn.addEventListener('click', () => {
-              delete filledFeatures[id];
-
-              map.removeFeatureState(
-                { source: key, id: featureId }
-              );
-
-              popup.remove();
-
-              // 進捗を更新
-              updateProgress();
-            });
-          }
+          document.getElementById('resetColorBtn')?.addEventListener('click', () => {
+            clearFeature(key, id);
+            popup.remove();
+            updateProgress();
+          });
         }, 0);
       }
     });
 
-    // マウスイベント
-    map.on('mouseenter', key + '-fill', function() {
-      map.getCanvas().style.cursor = 'pointer';
+    map.on('mouseenter', `${key}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', `${key}-fill`, () => { map.getCanvas().style.cursor = ''; });
+  });
+
+  // ---- 経線・緯線クリックイベント ----
+  ['meridians-line-hitarea', 'parallels-line-hitarea'].forEach(layerId => {
+    const isMeridian = layerId === 'meridians-line-hitarea';
+
+    map.on('click', layerId, e => {
+      // 上位レイヤー（国・州）が存在する場合は無視
+      const topFeatures = map.queryRenderedFeatures(e.point, {
+        layers: ['world-fill', 'world-line', 'usaStates-fill', 'usaStates-line']
+      });
+      if (topFeatures.length > 0 || !e.features.length) return;
+
+      const coords   = e.features[0].geometry.coordinates;
+      const degree   = Math.round(isMeridian ? coords[0][0] : coords[0][1]);
+      const label    = (isMeridian ? '経度 ' : '緯度 ') + degree + '°';
+      const uniqueId = (isMeridian ? 'lon_' : 'lat_') + degree;
+      const hlLayerId  = `highlight-line-${uniqueId}`;
+      const hlSourceId = `highlight-source-${uniqueId}`;
+
+      // 既存ハイライトを解除
+      if (highlightedLines.has(uniqueId)) {
+        if (map.getLayer(hlLayerId))   map.removeLayer(hlLayerId);
+        if (map.getSource(hlSourceId)) map.removeSource(hlSourceId);
+        highlightedLines.delete(uniqueId);
+        return;
+      }
+
+      // 新規ハイライト追加
+      const highlightFeature = {
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: isMeridian
+            ? [[degree, -85.0511], [degree, 85.0511]]
+            : [[-180, degree], [180, degree]]
+        }
+      };
+
+      map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
+      map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId, paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
+      map.moveLayer(hlLayerId);
+      highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId, degree });
+
+      new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${label}</strong>`).addTo(map);
     });
 
-    map.on('mouseleave', key + '-fill', function() {
-      map.getCanvas().style.cursor = '';
+    map.on('mousemove', layerId, e => {
+      const topFeatures = map.queryRenderedFeatures(e.point, {
+        layers: ['world-fill', 'world-line', 'usaStates-fill', 'usaStates-line']
+      });
+      map.getCanvas().style.cursor = topFeatures.length === 0 ? 'pointer' : '';
     });
+
+    map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
   });
 });
 
-// 地図ボタンの親コンテナ作成
-var mapBtnContainer = document.createElement('div');
-mapBtnContainer.className = 'map-btn-container';
+// ============================================================
+// レイヤーコントロール UI
+// ============================================================
 
-// 地図ボタン作成
-var mapButton = document.createElement('button');
-mapButton.innerHTML = 'Maps';
-mapButton.className = 'map-button';
-
-// レイヤー切り替えUI（アコーディオン風）
-var layerControl = document.createElement('div');
-layerControl.className = 'layer-control';
-
-layerControl.innerHTML = `
-  <label><input type="checkbox" id="layer_world" checked> World</label><br>
-  <label><input type="checkbox" id="layer_capitals"> Capitals</label><br>
-  <label><input type="checkbox" id="layer_usaStates"> USA States</label><br>
-  <label><input type="checkbox" id="layer_meridians"> Meridians</label><br>
-  <label><input type="checkbox" id="layer_parallels"> Parallels</label>
-`;
-
-// layerControl自体のクリックで閉じないようにする
-layerControl.addEventListener('click', function(e) {
-  e.stopPropagation();
-});
-
-// レイヤー順の定義（下から上）
-const layerOrder = ['world', 'usaStates', 'capitals'];
-
-// レイヤー順を整理する関数
-function reorderLayers() {
-  // 下から順に moveLayer を呼ぶことで、最終的に上に積まれていく
-  layerOrder.forEach(key => {
-    ['fill', 'line'].forEach(type => {
-      const layerId = key + '-' + type;
-      if (map.getLayer(layerId)) {
-        map.moveLayer(layerId);
-      }
-    });
-  });
-}
-
-// チェックボックスのイベント
-['world', 'usaStates', 'capitals'].forEach(key => {
-  const cb = layerControl.querySelector('#layer_' + key);
-  cb.addEventListener('change', (e) => {
-    const visibility = e.target.checked ? 'visible' : 'none';
-
-    ['fill', 'line'].forEach(type => {
-      const layerId = key + '-' + type;
-      if (map.getLayer(layerId)) {
-        map.setLayoutProperty(layerId, 'visibility', visibility);
-      }
-    });
-
-    // チェック変更のたびに順序を整理
+// GeoJSON レイヤーのチェックボックス
+LAYER_ORDER.forEach(key => {
+  const cb = layerControl.querySelector(`#layer_${key}`);
+  cb?.addEventListener('change', e => {
+    setLayerVisibility(key, e.target.checked);
     reorderLayers();
   });
 });
 
-// 経線・緯線のGeoJSON生成
-function generateMeridiansParallels() {
-  const meridians = { type: 'FeatureCollection', features: [] };
-  const parallels = { type: 'FeatureCollection', features: [] };
-
-  // 経線: -180 ~ 180 度, 10度刻み
-  for (let lon = -180; lon <= 180; lon += 10) {
-    meridians.features.push({
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: [[lon, -90], [lon, 90]]
-      },
-      properties: {}
-    });
-  }
-
-  // 緯線: -90 ~ 90 度, 10度刻み
-  for (let lat = -90; lat <= 90; lat += 10) {
-    parallels.features.push({
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: [[-180, lat], [180, lat]]
-      },
-      properties: {}
-    });
-  }
-
-  return { meridians, parallels };
-}
-
-const gridData = generateMeridiansParallels();
-
-// Mapにソース追加
-map.on('load', function() {
-  map.addSource('meridians', { type: 'geojson', data: gridData.meridians });
-  map.addSource('parallels', { type: 'geojson', data: gridData.parallels });
-
-  // レイヤー追加（当たり判定用の透明な太い線 + 表示用の細い線）
-  map.addLayer({
-    id: 'meridians-line-hitarea',
-    type: 'line',
-    source: 'meridians',
-    paint: {
-      'line-color': 'rgba(0,0,0,0)', // 完全に透明
-      'line-width': 10 // 当たり判定用に太く
-    },
-    layout: { visibility: 'none' }
-  });
-
-  map.addLayer({
-    id: 'meridians-line',
-    type: 'line',
-    source: 'meridians',
-    paint: { 'line-color': '#888', 'line-width': 1 },
-    layout: { visibility: 'none' }
-  });
-
-  map.addLayer({
-    id: 'parallels-line-hitarea',
-    type: 'line',
-    source: 'parallels',
-    paint: {
-      'line-color': 'rgba(0,0,0,0)',
-      'line-width': 10
-    },
-    layout: { visibility: 'none' }
-  });
-
-  map.addLayer({
-    id: 'parallels-line',
-    type: 'line',
-    source: 'parallels',
-    paint: { 'line-color': '#888', 'line-width': 1 },
-    layout: { visibility: 'none' }
-  });
-});
-
-// チェックボックスのイベント（両方のレイヤーを連動）
+// 経線・緯線のチェックボックス
 ['meridians', 'parallels'].forEach(key => {
-  const cb = layerControl.querySelector('#layer_' + key);
-  cb.addEventListener('change', (e) => {
+  const cb = layerControl.querySelector(`#layer_${key}`);
+  cb?.addEventListener('change', e => {
     const visibility = e.target.checked ? 'visible' : 'none';
-    if (map.getLayer(key + '-line')) {
-      map.setLayoutProperty(key + '-line', 'visibility', visibility);
-      map.setLayoutProperty(key + '-line-hitarea', 'visibility', visibility);
+    if (map.getLayer(`${key}-line`)) {
+      map.setLayoutProperty(`${key}-line`, 'visibility', visibility);
+      map.setLayoutProperty(`${key}-line-hitarea`, 'visibility', visibility);
     }
   });
 });
 
-// クリックされた線のハイライト管理
-let highlightedLineId = null;
-
-// クリックされた線のハイライト管理（配列で複数管理）
-let highlightedLines = new Map(); // key: 一意のID, value: { layerId, sourceId, degree }
-
-// 経線・緯線クリックイベント
-['meridians-line-hitarea', 'parallels-line-hitarea'].forEach(layerId => {
-  map.on('click', layerId, function (e) {
-    // 他の上位レイヤー（国や州）をクリックしているか判定
-    const topFeatures = map.queryRenderedFeatures(e.point, {
-      layers: ['world-fill', 'world-line', 'usaStates-fill', 'usaStates-line'] // ← 上位レイヤーIDを指定
-    });
-
-    // もし上位フィーチャがあれば、このクリックは無視
-    if (topFeatures.length > 0) {
-      return;
-    }
-    if (!e.features.length) return;
-    const feature = e.features[0];
-    const coords = feature.geometry.coordinates;
-    const isMeridian = layerId === 'meridians-line-hitarea';
-    const degreeRaw = isMeridian ? coords[0][0] : coords[0][1];
-    const degree = Math.round(degreeRaw); // 小数点以下を四捨五入して整数化
-    const label = (isMeridian ? '経度 ' : '緯度 ') + degree + '°';
-
-    // 一意のIDを生成（経度/緯度の値で識別）
-    const uniqueId = (isMeridian ? 'lon_' : 'lat_') + degree;
-    const highlightLayerId = 'highlight-line-' + uniqueId;
-    const highlightSourceId = 'highlight-source-' + uniqueId;
-
-    // すでにハイライトされている場合は解除
-    if (highlightedLines.has(uniqueId)) {
-      if (map.getLayer(highlightLayerId)) {
-        map.removeLayer(highlightLayerId);
-      }
-      if (map.getSource(highlightSourceId)) {
-        map.removeSource(highlightSourceId);
-      }
-      highlightedLines.delete(uniqueId);
-      return; // 解除したら終了
-    }
-
-    // 新しいハイライト追加
-    // 極域を避けた新しい線を生成
-    const highlightFeature = {
-      type: 'Feature',
-      geometry: {
-        type: 'LineString',
-        coordinates: isMeridian
-          ? [[degree, -85.0511], [degree, 85.0511]] // 経線
-          : [[-180, degree], [180, degree]]          // 緯線
-      }
-    };
-
-    map.addSource(highlightSourceId, {
-      type: 'geojson',
-      data: highlightFeature
-    });
-
-    map.addLayer({
-      id: highlightLayerId,
-      type: 'line',
-      source: highlightSourceId,
-      paint: {
-        'line-color': '#ff7171',
-        'line-width': 1.5
-      }
-    });
-
-    // タップで最前面に移動
-    map.moveLayer(highlightLayerId);
-
-    // 管理用Mapに追加
-    highlightedLines.set(uniqueId, {
-      layerId: highlightLayerId,
-      sourceId: highlightSourceId,
-      degree: degree
-    });
-
-    // ポップアップをクリック位置に表示
-    new maplibregl.Popup()
-      .setLngLat(e.lngLat)
-      .setHTML(`<strong>${label}</strong>`)
-      .addTo(map);
-  });
-});
-
-// カーソル変更も当たり判定レイヤーに
-['meridians-line-hitarea', 'parallels-line-hitarea'].forEach(layerId => {
-  map.on('mousemove', layerId, (e) => {
-    // 上位レイヤーに地物があるかチェック
-    const topFeatures = map.queryRenderedFeatures(e.point, {
-      layers: ['world-fill', 'world-line', 'usaStates-fill', 'usaStates-line'] // ← 上位レイヤーIDに合わせて調整
-    });
-
-    // 経線・緯線の下に上位地物がなければカーソルをpointerに
-    if (topFeatures.length === 0) {
-      map.getCanvas().style.cursor = 'pointer';
-    } else {
-      map.getCanvas().style.cursor = '';
-    }
-  });
-
-  // マウスがレイヤー外に出たらカーソルを戻す
-  map.on('mouseleave', layerId, () => {
-    map.getCanvas().style.cursor = '';
-  });
-});
-
-// アコーディオン開閉
-mapButton.addEventListener('click', function(e) {
+// マップボタン：レイヤーコントロールの開閉
+mapButton.addEventListener('click', e => {
   e.stopPropagation();
-  layerControl.style.display = layerControl.style.display === 'none' ? 'block' : 'none';
-
-  // 地域ボタンの位置を調整
-  if (layerControl.style.display === 'block') {
-    const mapBtnHeight = mapBtnContainer.offsetHeight;
-    regionBtnContainer.style.top = (20 + mapBtnHeight + 5) + 'px'; // 5pxは余白
-  } else {
-    regionBtnContainer.style.top = '55px'; // 元の位置に戻す
-  }
+  const isOpen = layerControl.style.display !== 'none';
+  layerControl.style.display = isOpen ? 'none' : 'block';
+  regionBtnContainer.style.top = isOpen ? '55px' : `${20 + mapBtnContainer.offsetHeight + 5}px`;
 });
 
-// 外側クリックで閉じる
-document.addEventListener('click', function() {
-  if (layerControl.style.display === 'block') {
-    layerControl.style.display = 'none';
-    regionBtnContainer.style.top = '55px'; // 元の位置に戻す
-  }
-});
+// ============================================================
+// 地域コントロール UI
+// ============================================================
 
-// コンテナ組み立て
-mapBtnContainer.appendChild(mapButton);
-mapBtnContainer.appendChild(layerControl);
-mapContainer.appendChild(mapBtnContainer);
-
-// 地域ボタンの親コンテナ作成
-var regionBtnContainer = document.createElement('div');
-regionBtnContainer.className = 'region-btn-container';
-
-// 地域ボタン作成
-var regionButton = document.createElement('button');
-regionButton.innerHTML = 'Regions';
-regionButton.className = 'region-button';
-
-// 地域コントロールUI（アコーディオン）
-var regionControl = document.createElement('div');
-regionControl.className = 'region-control';
-
-// 地域リスト（カラー付き）生成
 Object.entries(regionColors).forEach(([region, color]) => {
-  var regionItem = document.createElement('div');
+  const regionItem = document.createElement('div');
   regionItem.className = 'region-item';
 
-  // 色の四角
-  var colorBox = document.createElement('span');
+  const colorBox = document.createElement('span');
   colorBox.className = 'color-box';
   colorBox.style.background = color;
 
-  // ラベル
-  var label = document.createElement('span');
+  const label = document.createElement('span');
   label.textContent = region;
 
-  // リセットボタン
-  var resetBtn = document.createElement('button');
+  const resetBtn = document.createElement('button');
   resetBtn.textContent = '↵';
   resetBtn.className = 'reset-btn';
 
-  // 色ボックスクリックで色を適用
-  colorBox.addEventListener('click', function(e) {
+  // 色ボックスクリック：地域全体を塗りつぶす
+  colorBox.addEventListener('click', e => {
     e.stopPropagation();
-
-    ['world', 'usaStates', 'capitals'].forEach(key => {
-      if (map.getSource(key)) {
-        var source = map.getSource(key);
-        var data = source._data;
-        data.features.forEach(f => {
-          if (getRegion(f.properties) === region) {
-            var fId = key === 'usaStates'
-              ? f.properties.state_code
-              : (f.properties['name'] || f.id || f.properties.id);
-            if (fId) {
-              map.setFeatureState(
-                { source: key, id: fId },
-                { fillColor: color }
-              );
-              filledFeatures[fId] = { color: color, layerId: key };
-            }
-          }
-        });
-      }updateProgress();
-    });
+    applyToRegionFeatures(region, (key, fId) => fillFeature(key, fId, color));
+    updateProgress();
   });
 
-  // 地域名クリックでフォーカスズーム
-  label.addEventListener('click', function (e) {
+  // 地域名クリック：その地域にズーム
+  label.addEventListener('click', e => {
     e.stopPropagation();
-
-    var view = regionView[region];
-    if (view) {
-      map.flyTo({
-        center: view.center,
-        zoom: view.zoom,
-        speed: 0.8,   // アニメーション速度
-        curve: 1.2,   // 動きの滑らかさ
-        essential: true
-      });
-    } else {
-      alert(region + ' のビュー設定がありません');
-    }
+    const view = regionView[region];
+    if (view) map.flyTo({ center: view.center, zoom: view.zoom, speed: 0.8, curve: 1.2, essential: true });
+    else alert(`${region} のビュー設定がありません`);
   });
 
-  // リセットボタンクリックで色を元に戻す
-  resetBtn.addEventListener('click', function(e) {
+  // リセットボタン：地域全体の色塗りを解除
+  resetBtn.addEventListener('click', e => {
     e.stopPropagation();
-
-    ['world', 'usaStates', 'capitals'].forEach(key => {
-      if (map.getSource(key)) {
-        var source = map.getSource(key);
-        var data = source._data;
-        data.features.forEach(f => {
-          if (getRegion(f.properties) === region) {
-            var fId = key === 'usaStates'
-              ? f.properties.state_code
-              : (f.properties['name'] || f.id || f.properties.id);
-            if (fId) {
-              map.setFeatureState(
-                { source: key, id: fId },
-                { fillColor: null } // 元に戻す
-              );
-              delete filledFeatures[fId]; // 管理オブジェクトから削除
-            }
-          }
-        });
-      }updateProgress();
-    });
+    applyToRegionFeatures(region, (key, fId) => clearFeature(key, fId));
+    updateProgress();
   });
 
-  regionItem.appendChild(colorBox);
-  regionItem.appendChild(label);
-  regionItem.appendChild(resetBtn);
+  regionItem.append(colorBox, label, resetBtn);
   regionControl.appendChild(regionItem);
 });
 
-// アコーディオン開閉
-regionButton.addEventListener('click', function(e) {
+// 地域ボタン：地域コントロールの開閉
+regionButton.addEventListener('click', e => {
   e.stopPropagation();
   regionControl.style.display = regionControl.style.display === 'none' ? 'block' : 'none';
 });
 
-document.addEventListener('click', function() {
-  regionControl.style.display = 'none';
+// ============================================================
+// 検索・クリアボタン
+// ============================================================
+
+searchInput.addEventListener('input', updateProgress);
+
+clearButton.addEventListener('click', () => {
+  searchInput.value = '';
+  updateProgress();
 });
 
-// コンテナ組み立て
-regionBtnContainer.appendChild(regionButton);
-regionBtnContainer.appendChild(regionControl);
+// ============================================================
+// グローバルクリック（アコーディオンを閉じる）
+// ============================================================
+
+document.addEventListener('click', () => {
+  layerControl.style.display = 'none';
+  regionControl.style.display = 'none';
+  regionBtnContainer.style.top = '55px';
+});
+
+// アコーディオン自身のクリックで閉じないようにする
+layerControl.addEventListener('click', e => e.stopPropagation());
+regionControl.addEventListener('click', e => e.stopPropagation());
+
+// ============================================================
+// DOM組み立て
+// ============================================================
+
+mapBtnContainer.append(mapButton, layerControl);
+mapContainer.appendChild(mapBtnContainer);
+
+regionBtnContainer.append(regionButton, regionControl);
 mapContainer.appendChild(regionBtnContainer);
