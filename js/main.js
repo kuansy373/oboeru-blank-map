@@ -114,6 +114,13 @@ function findFeatureByName(name, sources = LAYER_ORDER) {
   return null;
 }
 
+// ひらがな→カナ変換
+function toKatakana(str) {
+  return str.replace(/[\u3041-\u3096]/g, ch =>
+    String.fromCharCode(ch.charCodeAt(0) + 0x60)
+  );
+}
+
 // ==================
 // 色塗り操作
 // ==================
@@ -303,10 +310,14 @@ function updateProgress() {
 
   const allRegions = [...Object.keys(countryRegions), 'Default'];
   const matchedRegions = allRegions.filter(region =>
-    searchTerms.some(term =>
-      region.toLowerCase().includes(term) ||
-      getRegionDisplayName(region).toLowerCase().includes(term)
-    )
+    searchTerms.some(term => {
+      const termKana = toKatakana(term);
+      return (
+        region.toLowerCase().includes(term) ||
+        getRegionDisplayName(region).toLowerCase().includes(term) ||
+        toKatakana(getRegionDisplayName(region)).includes(termKana)
+      );
+    })
   );
 
   if (matchedRegions.length === 0) {
@@ -759,7 +770,7 @@ document.querySelectorAll('input[name="projection"]').forEach(radio => {
 });
 
 // ==================
-// 検索・クリアボタン
+// 検索・トグルボタン
 // ==================
 
 searchToggle.addEventListener('click', e => {
