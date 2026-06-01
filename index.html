@@ -21,7 +21,7 @@
 
   <div class="search-container" id="search-container">
     <div class="search-wrapper">
-      <input type="text" id="search-input" class="search-input" placeholder="Type region names...">
+      <input type="text" id="search-input" class="search-input" data-en="Type region names..." data-ja="地域名を入力..." placeholder="">
       <button id="close-button" class="close-button">✕</button>
     </div>
     <div id="progress-display" class="progress-display"></div>
@@ -33,36 +33,36 @@
       <button id="menu-toggle">☰</button>
       <div id="menu-all-buttons" style="display:none;">
         <div id="menu-top">
-          <button id="btn-theme">Theme</button>
-          <button id="btn-language">Language</button>
+          <button id="btn-theme" data-en="Theme" data-ja="テーマ"></button>
+          <button id="btn-language" data-en="Language" data-ja="言語"></button>
         </div>
       </div>
     </div>
     <div id="menu-buttons" style="display:none;">
-      <button id="btn-maps">Maps</button>
-      <button id="btn-layers">Layers</button>
-      <button id="btn-regions">Regions</button>
+      <button id="btn-maps" data-en="Maps" data-ja="地図"></button>
+      <button id="btn-layers" data-en="Layers" data-ja="レイヤー"></button>
+      <button id="btn-regions" data-en="Regions" data-ja="地域"></button>
     </div>
 
     <!-- パネル -->
     <div id="theme-panel" class="menu-panel" style="display:none;">
-      <label><input type="radio" name="theme" value="light" checked> Light</label><br>
-      <label><input type="radio" name="theme" value="dark"> Dark</label>
+      <label><input type="radio" name="theme" value="light" checked> <span data-en="Light" data-ja="ライト"></span></label><br>
+      <label><input type="radio" name="theme" value="dark"> <span data-en="Dark" data-ja="ダーク"></span></label>
     </div>
     <div id="language-panel" class="menu-panel" style="display:none;">
       <label><input type="radio" name="language" value="en" checked> English</label><br>
       <label><input type="radio" name="language" value="ja"> 日本語</label>
     </div>
     <div id="maps-panel" class="menu-panel" style="display:none;">
-      <label><input type="radio" name="projection" value="mercator" checked> Mercator</label><br>
-      <label><input type="radio" name="projection" value="globe"> Globe</label>
+      <label><input type="radio" name="projection" value="mercator" checked> <span data-en="Mercator" data-ja="メルカトル"></span></label><br>
+      <label><input type="radio" name="projection" value="globe"> <span data-en="Globe" data-ja="地球儀"></label>
     </div>
     <div id="layers-panel" class="menu-panel" style="display:none;">
-      <label><input type="checkbox" id="layer_world" checked> World</label><br>
-      <label><input type="checkbox" id="layer_usaStates"> USA States</label><br>
-      <label><input type="checkbox" id="layer_chinaProvinces"> China Provinces</label><br>
-      <label><input type="checkbox" id="layer_meridians"> Meridians</label><br>
-      <label><input type="checkbox" id="layer_parallels"> Parallels</label>
+      <label><input type="checkbox" id="layer_world" checked> <span data-en="World" data-ja="世界"></span></label><br>
+      <label><input type="checkbox" id="layer_meridians"> <span data-en="Meridians" data-ja="経線"></span></label><br>
+      <label><input type="checkbox" id="layer_parallels"> <span data-en="Parallels" data-ja="緯線"></span></label><br>
+      <label><input type="checkbox" id="layer_usaStates"> <span data-en="USA States" data-ja="アメリカ(州)"></span></label><br>
+      <label><input type="checkbox" id="layer_chinaProvinces"> <span data-en="China Provinces" data-ja="中国(省)"></span></label><br>
     </div>
     <div id="region-control" class="menu-panel" style="display:none;"></div>
   </div>
