@@ -1,3 +1,17 @@
+const regionNameJa = {
+  'Europe': 'ヨーロッパ',
+  'Africa': 'アフリカ',
+  'Middle East': '中東',
+  'Asia': 'アジア',
+  'Oceania': 'オセアニア',
+  'North America': '北アメリカ',
+  'South America': '南アメリカ',
+  'Antarctica': '南極大陸',
+  'Default': '未定義',
+  'USA States': 'アメリカの州',
+  'China Provinces': '中国の省',
+};
+
 const translations = {
   "Albania": "アルバニア",
   "Andorra": "アンドラ",

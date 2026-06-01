@@ -34,6 +34,9 @@ const expandedLists = {};
 // ハイライトされた経線・緯線の管理 Map: key=uniqueId, value={ layerId, sourceId, degree }
 const highlightedLines = new Map();
 
+// 言語
+let currentLang = 'en';
+
 // ==================
 // DOM参照
 // ==================
@@ -115,6 +118,11 @@ function findFeatureByName(name, sources = LAYER_ORDER) {
 function getDisplayName(name) {
   if (currentLang === 'ja') return translations[name] || name;
   return name;
+}
+
+function getRegionDisplayName(region) {
+  if (currentLang === 'ja') return regionNameJa[region] || region;
+  return region;
 }
 
 // ==================
@@ -306,7 +314,10 @@ function updateProgress() {
 
   const allRegions = [...Object.keys(countryRegions), 'Default'];
   const matchedRegions = allRegions.filter(region =>
-    searchTerms.some(term => region.toLowerCase().includes(term))
+    searchTerms.some(term =>
+      region.toLowerCase().includes(term) ||
+      getRegionDisplayName(region).toLowerCase().includes(term)
+    )
   );
 
   if (matchedRegions.length === 0) {
@@ -359,7 +370,7 @@ function updateProgress() {
       <div class="region-progress-wrapper">
         <div class="region-progress-header">
           <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
-            <div class="region-progress-name" style="color:${color};">${region}</div>
+          <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
             <div class="region-progress-count">${filledCount} / ${totalCount}</div>
           </div>
           <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
@@ -467,7 +478,7 @@ map.on('load', function () {
             <div class="popup-content">
               <div class="popup-name">${getDisplayName(name)}</div>
               <div class="popup-region">
-                <span>${region}</span>
+                <span>${getRegionDisplayName(region)}</span>
                 <button id="resetColorBtn" class="popup-reset-btn"></button>
               </div>
             </div>
@@ -573,45 +584,51 @@ LAYER_ORDER.forEach(key => {
 // 地域コントロール UI
 // ==================
 
-Object.entries(regionColors).forEach(([region, color]) => {
-  const regionItem = document.createElement('div');
-  regionItem.className = 'region-item';
+function buildRegionControl() {
+  regionControl.innerHTML = '';
 
-  const colorBox = document.createElement('span');
-  colorBox.className = 'color-box';
-  colorBox.style.background = color;
+  Object.entries(regionColors).forEach(([region, color]) => {
+    const regionItem = document.createElement('div');
+    regionItem.className = 'region-item';
 
-  const label = document.createElement('span');
-  label.textContent = region;
+    const colorBox = document.createElement('span');
+    colorBox.className = 'color-box';
+    colorBox.style.background = color;
 
-  const resetBtn = document.createElement('button');
-  resetBtn.className = 'reset-btn';
+    const label = document.createElement('span');
+    label.textContent = getRegionDisplayName(region);
 
-  // 色ボックスクリック：地域全体を塗りつぶす
-  colorBox.addEventListener('click', e => {
-    e.stopPropagation();
-    applyToRegionFeatures(region, (key, fId) => fillFeature(key, fId, color));
-    updateProgress();
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'reset-btn';
+
+    // 色ボックスクリック：地域全体を塗りつぶす
+    colorBox.addEventListener('click', e => {
+      e.stopPropagation();
+      applyToRegionFeatures(region, (key, fId) => fillFeature(key, fId, color));
+      updateProgress();
+    });
+
+    // 地域名クリック：その地域にズーム
+    label.addEventListener('click', e => {
+      e.stopPropagation();
+      const view = regionView[region];
+      if (view) map.flyTo({ center: view.center, zoom: view.zoom, speed: 0.8, curve: 1.2, essential: true });
+      else alert(`${getRegionDisplayName(region)} のビュー設定がありません`);
+    });
+
+    // リセットボタン：地域全体の色塗りを解除
+    resetBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      applyToRegionFeatures(region, (key, fId) => clearFeature(key, fId));
+      updateProgress();
+    });
+
+    regionItem.append(colorBox, label, resetBtn);
+    regionControl.appendChild(regionItem);
   });
+}
 
-  // 地域名クリック：その地域にズーム
-  label.addEventListener('click', e => {
-    e.stopPropagation();
-    const view = regionView[region];
-    if (view) map.flyTo({ center: view.center, zoom: view.zoom, speed: 0.8, curve: 1.2, essential: true });
-    else alert(`${region} のビュー設定がありません`);
-  });
-
-  // リセットボタン：地域全体の色塗りを解除
-  resetBtn.addEventListener('click', e => {
-    e.stopPropagation();
-    applyToRegionFeatures(region, (key, fId) => clearFeature(key, fId));
-    updateProgress();
-  });
-
-  regionItem.append(colorBox, label, resetBtn);
-  regionControl.appendChild(regionItem);
-});
+buildRegionControl();
 
 // ==================
 // テーマコントロール UI
@@ -642,6 +659,7 @@ document.querySelectorAll('input[name="language"]').forEach(radio => {
   radio.addEventListener('change', e => {
     currentLang = e.target.value;
     updateProgress();
+    buildRegionControl();
   });
 });
 
