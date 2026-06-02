@@ -1,99 +1,97 @@
 <!DOCTYPE html>
 <html lang="ja">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-  <!-- Google Search Console -->
-  <meta name="google-site-verification" content="gTSLncYy092PCzUl-3VTapFQ-XrjVWXffuhhikM9adg" />
+    <!-- Google Search Console -->
+    <meta name="google-site-verification" content="gTSLncYy092PCzUl-3VTapFQ-XrjVWXffuhhikM9adg" />
 
-  <!-- Google Analytics -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-LKFSL59GSJ"></script>
-  <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'G-LKFSL59GSJ');
-  </script>
+    <!-- Google Analytics -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-LKFSL59GSJ"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-LKFSL59GSJ');
+    </script>
 
-  <title>Anki World Map</title>
+    <title>Anki World Map</title>
 
-  <!-- MapLibre GL CSS -->
-  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@5.24.0/dist/maplibre-gl.css">
+    <link rel="stylesheet" href="css/style.css">
 
-  <!-- 自前のCSS（ステップ2以降で作る） -->
-  <link rel="stylesheet" href="css/style.css">
-</head>
-<body>
+  </head>
+  <body>
 
-  <!-- 地図を表示するコンテナ -->
-  <div id="bm-worldmap"></div>
+    <!-- 地図を表示するコンテナ -->
+    <div id="bm-worldmap"></div>
 
-  <!-- 検索ボックス -->
-  <button id="search-toggle">🔍</button>
+    <!-- 検索ボックス -->
+    <button id="search-toggle">🔍</button>
 
-  <div class="search-container" id="search-container">
-    <div class="search-wrapper">
-      <input type="text" id="search-input" class="search-input" data-en="Type region names..." data-ja="地域名を入力..." placeholder="">
-      <button id="close-button" class="close-button">✕</button>
+    <div class="search-container" id="search-container">
+      <div class="search-wrapper">
+        <input type="text" id="search-input" class="search-input" data-en="Type region names..." data-ja="地域名を入力..." placeholder="">
+        <button id="close-button" class="close-button">✕</button>
+      </div>
+      <div id="progress-display" class="progress-display"></div>
     </div>
-    <div id="progress-display" class="progress-display"></div>
-  </div>
 
-  <!-- メニュー -->
-  <div id="menu-container">
-    <div id="menu-row1">
-      <button id="menu-toggle">☰</button>
-      <div id="menu-all-buttons" style="display:none;">
-        <div id="menu-top">
-          <button id="btn-theme" data-en="Theme" data-ja="テーマ"></button>
-          <button id="btn-language" data-en="Language" data-ja="言語"></button>
+    <!-- メニュー -->
+    <div id="menu-container">
+      <div id="menu-row1">
+        <button id="menu-toggle">☰</button>
+        <div id="menu-all-buttons" style="display:none;">
+          <div id="menu-top">
+            <button id="btn-theme" data-en="Theme" data-ja="テーマ"></button>
+            <button id="btn-language" data-en="Language" data-ja="言語"></button>
+          </div>
         </div>
       </div>
-    </div>
-    <div id="menu-buttons" style="display:none;">
-      <button id="btn-maps" data-en="Maps" data-ja="地図"></button>
-      <button id="btn-layers" data-en="Layers" data-ja="レイヤー"></button>
-      <button id="btn-regions" data-en="Regions" data-ja="地域"></button>
+      <div id="menu-buttons" style="display:none;">
+        <button id="btn-maps" data-en="Maps" data-ja="地図"></button>
+        <button id="btn-layers" data-en="Layers" data-ja="レイヤー"></button>
+        <button id="btn-regions" data-en="Regions" data-ja="地域"></button>
+      </div>
+
+      <!-- パネル -->
+      <div id="theme-panel" class="menu-panel" style="display:none;">
+        <label><input type="radio" name="theme" value="light" checked> <span data-en="Light" data-ja="ライト"></span></label><br>
+        <label><input type="radio" name="theme" value="dark"> <span data-en="Dark" data-ja="ダーク"></span></label>
+      </div>
+      <div id="language-panel" class="menu-panel" style="display:none;">
+        <label><input type="radio" name="language" value="en" checked> English</label><br>
+        <label><input type="radio" name="language" value="ja"> 日本語</label>
+      </div>
+      <div id="maps-panel" class="menu-panel" style="display:none;">
+        <label><input type="radio" name="projection" value="mercator" checked> <span data-en="Mercator" data-ja="メルカトル"></span></label><br>
+        <label><input type="radio" name="projection" value="globe"> <span data-en="Globe" data-ja="地球儀"></label>
+      </div>
+      <div id="layers-panel" class="menu-panel" style="display:none;">
+        <label><input type="checkbox" id="layer_world" checked> <span data-en="World" data-ja="世界"></span></label><br>
+        <label><input type="checkbox" id="layer_meridians"> <span data-en="Meridians" data-ja="経線"></span></label><br>
+        <label><input type="checkbox" id="layer_parallels"> <span data-en="Parallels" data-ja="緯線"></span></label><br>
+        <label><input type="checkbox" id="layer_usaStates"> <span data-en="USA States" data-ja="アメリカ(州)"></span></label><br>
+        <label><input type="checkbox" id="layer_chinaProvinces"> <span data-en="China Provinces" data-ja="中国(省)"></span></label><br>
+      </div>
+      <div id="region-control" class="menu-panel" style="display:none;"></div>
     </div>
 
-    <!-- パネル -->
-    <div id="theme-panel" class="menu-panel" style="display:none;">
-      <label><input type="radio" name="theme" value="light" checked> <span data-en="Light" data-ja="ライト"></span></label><br>
-      <label><input type="radio" name="theme" value="dark"> <span data-en="Dark" data-ja="ダーク"></span></label>
-    </div>
-    <div id="language-panel" class="menu-panel" style="display:none;">
-      <label><input type="radio" name="language" value="en" checked> English</label><br>
-      <label><input type="radio" name="language" value="ja"> 日本語</label>
-    </div>
-    <div id="maps-panel" class="menu-panel" style="display:none;">
-      <label><input type="radio" name="projection" value="mercator" checked> <span data-en="Mercator" data-ja="メルカトル"></span></label><br>
-      <label><input type="radio" name="projection" value="globe"> <span data-en="Globe" data-ja="地球儀"></label>
-    </div>
-    <div id="layers-panel" class="menu-panel" style="display:none;">
-      <label><input type="checkbox" id="layer_world" checked> <span data-en="World" data-ja="世界"></span></label><br>
-      <label><input type="checkbox" id="layer_meridians"> <span data-en="Meridians" data-ja="経線"></span></label><br>
-      <label><input type="checkbox" id="layer_parallels"> <span data-en="Parallels" data-ja="緯線"></span></label><br>
-      <label><input type="checkbox" id="layer_usaStates"> <span data-en="USA States" data-ja="アメリカ(州)"></span></label><br>
-      <label><input type="checkbox" id="layer_chinaProvinces"> <span data-en="China Provinces" data-ja="中国(省)"></span></label><br>
-    </div>
+    <!-- Regionsパネル -->
     <div id="region-control" class="menu-panel" style="display:none;"></div>
-  </div>
 
-  <!-- Regionsパネル -->
-  <div id="region-control" class="menu-panel" style="display:none;"></div>
+    <!-- ライブラリ -->
+    <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
 
-  <!-- 外部ライブラリ -->
-  <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@turf/turf@6/turf.min.js"></script>
+    <!-- データ -->
+    <script src="data/regions.js"></script>
+    <script src="data/subdivisions.js"></script>
+    <script src="data/translations.js"></script>
 
-  <!-- データ（先に読み込む） -->
-  <script src="data/regions.js"></script>
-  <script src="data/subdivisions.js"></script>
-  <script src="data/translations.js"></script>
+    <!-- メインロジック-->
+    <script src="js/main.js"></script>
 
-  <!-- ロジック-->
-  <script src="js/main.js"></script>
-
-</body>
+  </body>
 </html>
