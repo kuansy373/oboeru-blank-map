@@ -216,42 +216,45 @@ document.addEventListener('DOMContentLoaded', () => {
   // GeoJSONロード
   // ==================
 
-  function loadLayer(key, url) {
-    fetch(url)
-      .then(res => res.json())
-      .then(data => {
-        geojsonData[key] = data;
+  async function fetchGeoJSON(key, url) {
+    const res = await fetch(url);
+    const data = await res.json();
+    geojsonData[key] = data;
+    return { key, data };
+  }
 
-        map.addSource(key, {
-          type: 'geojson',
-          data,
-          promoteId: key === 'usaStates'      ? 'state_code'
-                  : key === 'chinaProvinces' ? 'name'  // 英語名がIDになる
-                  : 'name'
-        });
+  function addLayerToMap(key, data) {
+    map.addSource(key, {
+      type: 'geojson',
+      data,
+      promoteId: key === 'usaStates'     ? 'state_code'
+               : key === 'chinaProvinces' ? 'name'
+               : 'name'
+    });
 
-        map.addLayer({
-          id: `${key}-fill`,
-          type: 'fill',
-          source: key,
-          paint: {
-            'fill-color': ['case', ['!=', ['feature-state', 'fillColor'], null], ['feature-state', 'fillColor'], '#eaeaea'],
-            'fill-opacity': 1
-          }
-        });
+    map.addLayer({
+      id: `${key}-fill`,
+      type: 'fill',
+      source: key,
+      paint: {
+        'fill-color': ['case',
+          ['!=', ['feature-state', 'fillColor'], null],
+          ['feature-state', 'fillColor'],
+          '#eaeaea'
+        ],
+        'fill-opacity': 1
+      }
+    });
 
-        map.addLayer({
-          id: `${key}-line`,
-          type: 'line',
-          source: key,
-          paint: { 'line-color': '#888', 'line-width': 1 }
-        });
+    map.addLayer({
+      id: `${key}-line`,
+      type: 'line',
+      source: key,
+      paint: { 'line-color': '#888', 'line-width': 1 }
+    });
 
-        // countries のみ初期表示、他は非表示
-        if (key !== 'countries') setLayerVisibility(key, false);
-        else document.getElementById(`layer_${key}`).checked = true;
-      })
-      .catch(err => console.error('GeoJSON load failed for', key, err));
+    if (key !== 'countries') setLayerVisibility(key, false);
+    else document.getElementById(`layer_${key}`).checked = true;
   }
 
   // ==================
@@ -446,116 +449,123 @@ document.addEventListener('DOMContentLoaded', () => {
     mapContainer.classList.add('theme-light');
   });
 
-  map.on('load', function () {
-    // GeoJSONレイヤーのロード
-    LAYER_ORDER.forEach(key => loadLayer(key, geoUrls[key]));
+  const geoFetchPromise = Promise.all(
+    LAYER_ORDER.map(key => fetchGeoJSON(key, geoUrls[key]))
+  );
 
-    // 経線・緯線の追加
-    addGridLayers(generateMeridiansParallels());
+  const mapLoadPromise = new Promise(resolve => map.on('load', resolve));
 
-    // ---- 国・州クリックイベント ----
-    LAYER_ORDER.forEach(key => {
-      map.on('click', `${key}-fill`, e => {
-        const feature = e.features[0];
-        const props   = feature.properties;
+  Promise.all([mapLoadPromise, geoFetchPromise])
+    .then(([, fetchedLayers]) => {
+      // style.load で追加済みの background レイヤーの後にGeoJSONレイヤーを積む
+      fetchedLayers.forEach(({ key, data }) => addLayerToMap(key, data));
+      reorderLayers();
+      addGridLayers(generateMeridiansParallels());
 
-        // 上位レイヤーのフィーチャがある場合は無視
-        const upperLayers = LAYER_ORDER.slice(LAYER_ORDER.indexOf(key) + 1).map(k => `${k}-fill`);
-        if (upperLayers.some(l => map.queryRenderedFeatures(e.point, { layers: [l] }).length > 0)) return;
+      // ---- 国・州クリックイベント ----
+      LAYER_ORDER.forEach(key => {
+        map.on('click', `${key}-fill`, e => {
+          const feature = e.features[0];
+          const props   = feature.properties;
 
-        const featureId = getFeatureId(key, feature);
-        const id        = featureId || props.id || props.name || props.NAME;
-        const name      = props.name || props.NAME || props.ADMIN || props.ADMIN_EN || 'Unknown';
-        const region    = getRegion(props);
-        const fillColor = regionColors[region] || regionColors.Default;
+          // 上位レイヤーのフィーチャがある場合は無視
+          const upperLayers = LAYER_ORDER.slice(LAYER_ORDER.indexOf(key) + 1).map(k => `${k}-fill`);
+          if (upperLayers.some(l => map.queryRenderedFeatures(e.point, { layers: [l] }).length > 0)) return;
 
-        if (!filledFeatures[id]) {
-          fillFeature(key, id, fillColor);
-          updateProgress();
-        } else {
-          // 塗り済みの場合：ポップアップでリセット可能にする
-          const popup = new maplibregl.Popup()
-            .setLngLat(e.lngLat)
-            .setHTML(`
-              <div class="popup-content">
-                <div class="popup-name">${getDisplayName(name)}</div>
-                <div class="popup-region">
-                  <span>${getRegionDisplayName(region)}</span>
-                  <button id="resetColorBtn" class="popup-reset-btn"></button>
+          const featureId = getFeatureId(key, feature);
+          const id        = featureId || props.id || props.name || props.NAME;
+          const name      = props.name || props.NAME || props.ADMIN || props.ADMIN_EN || 'Unknown';
+          const region    = getRegion(props);
+          const fillColor = regionColors[region] || regionColors.Default;
+
+          if (!filledFeatures[id]) {
+            fillFeature(key, id, fillColor);
+            updateProgress();
+          } else {
+            // 塗り済みの場合：ポップアップでリセット可能にする
+            const popup = new maplibregl.Popup()
+              .setLngLat(e.lngLat)
+              .setHTML(`
+                <div class="popup-content">
+                  <div class="popup-name">${getDisplayName(name)}</div>
+                  <div class="popup-region">
+                    <span>${getRegionDisplayName(region)}</span>
+                    <button id="resetColorBtn" class="popup-reset-btn"></button>
+                  </div>
                 </div>
-              </div>
-            `)
-            .addTo(map);
+              `)
+              .addTo(map);
 
-          setTimeout(() => {
-            document.getElementById('resetColorBtn')?.addEventListener('click', () => {
-              clearFeature(key, id);
-              popup.remove();
-              updateProgress();
-            });
-          }, 0);
-        }
-      });
-
-      map.on('mouseenter', `${key}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
-      map.on('mouseleave', `${key}-fill`, () => { map.getCanvas().style.cursor = ''; });
-    });
-
-    // ---- 経線・緯線クリックイベント ----
-    ['meridians-line-hitarea', 'parallels-line-hitarea'].forEach(layerId => {
-      const isMeridian = layerId === 'meridians-line-hitarea';
-
-      map.on('click', layerId, e => {
-        // 上位レイヤー（国・州）が存在する場合は無視
-        const topFeatures = map.queryRenderedFeatures(e.point, {
-          layers: ['countries-fill', 'countries-line', 'usaStates-fill', 'usaStates-line']
-        });
-        if (topFeatures.length > 0 || !e.features.length) return;
-
-        const coords   = e.features[0].geometry.coordinates;
-        const degree   = Math.round(isMeridian ? coords[0][0] : coords[0][1]);
-        const label = (isMeridian ? 'Lng: ' : 'Lat: ') + degree + '°';
-        const uniqueId = (isMeridian ? 'lon_' : 'lat_') + degree;
-        const hlLayerId  = `highlight-line-${uniqueId}`;
-        const hlSourceId = `highlight-source-${uniqueId}`;
-
-        // 既存ハイライトを解除
-        if (highlightedLines.has(uniqueId)) {
-          if (map.getLayer(hlLayerId))   map.removeLayer(hlLayerId);
-          if (map.getSource(hlSourceId)) map.removeSource(hlSourceId);
-          highlightedLines.delete(uniqueId);
-          return;
-        }
-
-        // 新規ハイライト追加
-        const highlightFeature = {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: isMeridian
-              ? [[degree, -85.0511], [degree, 85.0511]]
-              : [[-180, degree], [180, degree]]
+            setTimeout(() => {
+              document.getElementById('resetColorBtn')?.addEventListener('click', () => {
+                clearFeature(key, id);
+                popup.remove();
+                updateProgress();
+              });
+            }, 0);
           }
-        };
-
-        map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
-        map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId, paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
-        map.moveLayer(hlLayerId);
-        highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId, degree });
-
-        new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${label}</strong>`).addTo(map);
-      });
-
-      map.on('mousemove', layerId, e => {
-        const topFeatures = map.queryRenderedFeatures(e.point, {
-          layers: ['countries-fill', 'countries-line', 'usaStates-fill', 'usaStates-line']
         });
-        map.getCanvas().style.cursor = topFeatures.length === 0 ? 'pointer' : '';
+
+        map.on('mouseenter', `${key}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', `${key}-fill`, () => { map.getCanvas().style.cursor = ''; });
       });
 
-      map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
-    });
-  });
+      // ---- 経線・緯線クリックイベント ----
+      ['meridians-line-hitarea', 'parallels-line-hitarea'].forEach(layerId => {
+        const isMeridian = layerId === 'meridians-line-hitarea';
+
+        map.on('click', layerId, e => {
+          // 上位レイヤー（国・州）が存在する場合は無視
+          const topFeatures = map.queryRenderedFeatures(e.point, {
+            layers: ['countries-fill', 'countries-line', 'usaStates-fill', 'usaStates-line']
+          });
+          if (topFeatures.length > 0 || !e.features.length) return;
+
+          const coords   = e.features[0].geometry.coordinates;
+          const degree   = Math.round(isMeridian ? coords[0][0] : coords[0][1]);
+          const label = (isMeridian ? 'Lng: ' : 'Lat: ') + degree + '°';
+          const uniqueId = (isMeridian ? 'lon_' : 'lat_') + degree;
+          const hlLayerId  = `highlight-line-${uniqueId}`;
+          const hlSourceId = `highlight-source-${uniqueId}`;
+
+          // 既存ハイライトを解除
+          if (highlightedLines.has(uniqueId)) {
+            if (map.getLayer(hlLayerId))   map.removeLayer(hlLayerId);
+            if (map.getSource(hlSourceId)) map.removeSource(hlSourceId);
+            highlightedLines.delete(uniqueId);
+            return;
+          }
+
+          // 新規ハイライト追加
+          const highlightFeature = {
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: isMeridian
+                ? [[degree, -85.0511], [degree, 85.0511]]
+                : [[-180, degree], [180, degree]]
+            }
+          };
+
+          map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
+          map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId, paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
+          map.moveLayer(hlLayerId);
+          highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId, degree });
+
+          new maplibregl.Popup().setLngLat(e.lngLat).setHTML(`<strong>${label}</strong>`).addTo(map);
+        });
+
+        map.on('mousemove', layerId, e => {
+          const topFeatures = map.queryRenderedFeatures(e.point, {
+            layers: ['countries-fill', 'countries-line', 'usaStates-fill', 'usaStates-line']
+          });
+          map.getCanvas().style.cursor = topFeatures.length === 0 ? 'pointer' : '';
+        });
+
+        map.on('mouseleave', layerId, () => { map.getCanvas().style.cursor = ''; });
+      });
+    })
+    .catch(err => console.error('初期化失敗:', err));
 
   // ==================
   // レイヤーコントロール UI
