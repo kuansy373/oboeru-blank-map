@@ -47,7 +47,13 @@ The following third-party components are included under their respective license
    -1. geo-countries
       - All data is licensed under the Open Data Commons Public Domain Dedication and License.
       - https://github.com/datasets/geo-countries
-    
+
    -2. geo-admin1-us
       - All data is licensed under the Open Data Commons Public Domain Dedication and License.
       - https://github.com/datasets/geo-admin1-us
+
+   -3. cn-atlas
+      - ISC License
+      - Copyright (c) Amll
+      - https://github.com/BarbarossaWang/cn-atlas
+      - Data source: ruiduobao/shengshixian.com
