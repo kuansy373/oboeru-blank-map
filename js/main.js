@@ -376,7 +376,7 @@ function updateProgress() {
           <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
         </div>
         <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
-          ${countryList.map(c => `<div style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
+        ${countryList.map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
         </div>
       </div>
     `;
@@ -409,12 +409,12 @@ function updateProgress() {
     elem.addEventListener('mouseleave', () => { if (elem.dataset.origColor) elem.style.color = elem.dataset.origColor; });
     elem.addEventListener('click', e => {
       e.stopPropagation();
-      const countryName = elem.textContent.trim();
+      const countryCode = elem.dataset.code || elem.textContent.trim();
       const regionId = elem.closest('[id^="country-list-"]').id.replace('country-list-', '').replace(/-/g, ' ');
       const region = Object.keys(countryRegions).find(r => r.toLowerCase() === regionId.toLowerCase()) || 'Default';
-      const feature = findFeatureByName(countryName, region === 'USA States' ? ['usaStates'] : undefined);
+      const feature = findFeatureByName(countryCode, region === 'USA States' ? ['usaStates'] : undefined);
       if (feature) zoomToFeature(feature);
-      else console.warn('国を特定できませんでした:', countryName);
+      else console.warn('国を特定できませんでした:', countryCode);
     });
   });
 
