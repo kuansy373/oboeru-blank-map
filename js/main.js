@@ -30,11 +30,20 @@ document.addEventListener('DOMContentLoaded', () => {
   // 色塗り管理オブジェクト: { [featureId]: { color, layerId } }
   const filledFeatures = {};
 
+  // フィーチャ検索インデックス: { [sourceKey]: Map<normalizedKey, feature> }
+  const featureIndex = {};
+
   // 国リストの開閉状態を保持
   const expandedLists = {};
 
   // ハイライトされた経線・緯線の管理 Map: key=uniqueId, value={ layerId, sourceId, degree }
   const highlightedLines = new Map();
+
+  // テーマ
+  const themes = {
+    light: { sea: '#fff' },
+    dark: { sea: '#000' }
+  };
 
   // 言語
   let currentLang = 'en';
@@ -98,20 +107,28 @@ document.addEventListener('DOMContentLoaded', () => {
       : (feature.properties['name'] || feature.id || feature.properties.id);
   }
 
+  /** GeoJSONロード後にインデックスを構築する */
+  function buildFeatureIndex(key, data) {
+    const index = new Map();
+    data.features.forEach(feature => {
+      const props = feature.properties;
+      const candidates = [
+        props.name, props.NAME, props.ADMIN, props.ADMIN_EN,
+        props.state_code, props['ISO3166-1-Alpha-2']
+      ];
+      candidates.forEach(v => {
+        if (v) index.set(normalize(v), feature);
+      });
+    });
+    featureIndex[key] = index;
+  }
+
   /** 名前またはコードからフィーチャを検索 */
   function findFeatureByName(name, sources = LAYER_ORDER) {
     const n = normalize(name);
     for (const sourceKey of sources) {
-      const data = geojsonData[sourceKey];
-      if (!data?.features) continue;
-      for (const feature of data.features) {
-        const props = feature.properties;
-        const candidates = [
-          props.name, props.NAME, props.ADMIN, props.ADMIN_EN,
-          props.state_code, props['ISO3166-1-Alpha-2']
-        ].map(v => normalize(v || ''));
-        if (candidates.includes(n)) return feature;
-      }
+      const feature = featureIndex[sourceKey]?.get(n);
+      if (feature) return feature;
     }
     return null;
   }
@@ -472,6 +489,7 @@ document.addEventListener('DOMContentLoaded', () => {
   Promise.all([mapLoaded, initialFetch])
     .then(() => {
       addLayerToMap('countries', geojsonData.countriesLow);
+      buildFeatureIndex('countries', geojsonData.countriesLow);
       reorderLayers();
       addGridLayers(generateMeridiansParallels());
       registerClickEvents();
@@ -480,11 +498,14 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchGeoJSON(key, url).then(() => {
           if (key === 'countries') {
             map.getSource('countries').setData(geojsonData.countries);
+            buildFeatureIndex('countries', geojsonData.countries);
           } else {
             addLayerFn[type](key, geojsonData[key]);
+            buildFeatureIndex(key, geojsonData[key]);
           }
           reorderLayers();
-        });
+        })
+        .catch(err => console.error(`${key} のロードに失敗:`, err));
       });
     })
     .catch(err => console.error('初期化失敗:', err));
@@ -567,11 +588,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================
   // テーマコントロール UI
   // ==================
-
-  const themes = {
-    light: { sea: '#fff' },
-    dark: { sea: '#000' }
-  };
 
   function applyTheme(themeName) {
     const theme = themes[themeName];
@@ -725,21 +741,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // 進捗表示
   // ==================
 
-  function updateProgress() {
-    // 各リストのスクロール位置を保存
-    const scrollPositions = {};
-    progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
-      scrollPositions[list.id] = list.scrollTop;
-    });
-
-    const searchQuery = searchInput.value.trim();
-    if (!searchQuery) { progressDisplay.innerHTML = ''; return; }
-
-    const searchTerms = searchQuery.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-    if (searchTerms.length === 0) { progressDisplay.innerHTML = ''; return; }
-
+  /** 検索クエリにマッチする地域名の配列を返す */
+  function getMatchedRegions(query) {
+    const searchTerms = query.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+    if (searchTerms.length === 0) return [];
     const allRegions = [...Object.keys(countryRegions), 'Default'];
-    const matchedRegions = allRegions.filter(region =>
+    return allRegions.filter(region =>
       searchTerms.some(term => {
         const termKana = toKatakana(term);
         return (
@@ -749,76 +756,63 @@ document.addEventListener('DOMContentLoaded', () => {
         );
       })
     );
+  }
 
-    if (matchedRegions.length === 0) {
-      progressDisplay.innerHTML = '<div style="color:#999; margin-top:8px;">No matching regions.</div>';
-      return;
-    }
-
-    // 地域ごとの国リストを構築
-    function buildCountryList(region) {
-      if (region !== 'Default') {
-        return countryRegions[region].map(country => {
-          let displayName = country;
-          if (region === 'USA States' && geojsonData.usaStates?.features) {
-            const match = geojsonData.usaStates.features.find(f => f.properties.state_code === country);
-            if (match?.properties.name) displayName = match.properties.name;
-          }
-          displayName = getDisplayName(displayName);
-          const filled = Object.keys(filledFeatures).some(id => normalize(country) === normalize(id) || country === id);
-          return { name: displayName, code: country, filled };
-        });
-      }
-
-      // Default 地域：GeoJSONから直接収集
-      const defaultIds = new Set();
-      ['countries'].forEach(key => {
-        geojsonData[key]?.features?.forEach(f => {
-          if (getRegion(f.properties) === 'Default') {
-            defaultIds.add(f.properties.name || f.id);
-          }
-        });
+  /** 地域に属する国リストを返す */
+  function buildCountryList(region) {
+    if (region !== 'Default') {
+      return countryRegions[region].map(country => {
+        let displayName = country;
+        if (region === 'USA States' && geojsonData.usaStates?.features) {
+          const match = geojsonData.usaStates.features.find(f => f.properties.state_code === country);
+          if (match?.properties.name) displayName = match.properties.name;
+        }
+        displayName = getDisplayName(displayName);
+        const filled = Object.keys(filledFeatures).some(id => normalize(country) === normalize(id) || country === id);
+        return { name: displayName, code: country, filled };
       });
-
-      return [...defaultIds].map(id => ({
-        name: id,
-        code: id,
-        filled: Object.keys(filledFeatures).some(fid => normalize(id) === normalize(fid) || id === fid)
-      }));
     }
+    // Default 地域：GeoJSONから直接収集
+    const defaultIds = new Set();
+    geojsonData.countries?.features?.forEach(f => {
+      if (getRegion(f.properties) === 'Default') defaultIds.add(f.properties.name || f.id);
+    });
+    return [...defaultIds].map(id => ({
+      name: id,
+      code: id,
+      filled: Object.keys(filledFeatures).some(fid => normalize(id) === normalize(fid) || id === fid)
+    }));
+  }
 
-    const html = matchedRegions.map(region => {
+  /** マッチした地域リストから進捗表示用のHTML文字列を生成する */
+  function buildProgressHTML(matchedRegions) {
+    return matchedRegions.map(region => {
       const countryList = buildCountryList(region);
       const filledCount = countryList.filter(c => c.filled).length;
-      const totalCount  = countryList.length;
-      const color       = regionColors[region] || regionColors.Default;
-      const listId      = `country-list-${region.replace(/\s+/g, '-')}`;
-      const isExpanded  = expandedLists[region] || false;
+      const totalCount = countryList.length;
+      const color = regionColors[region] || regionColors.Default;
+      const listId = `country-list-${region.replace(/\s+/g, '-')}`;
+      const isExpanded = expandedLists[region] || false;
       const hasUnfilled = countryList.some(c => !c.filled);
-
       return `
         <div class="region-progress-wrapper">
           <div class="region-progress-header">
             <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
-            <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
+              <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
               <div class="region-progress-count">${filledCount} / ${totalCount}</div>
             </div>
             <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
           </div>
           <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
-          ${countryList.map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
+            ${countryList.map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
           </div>
         </div>
       `;
     }).join('');
+  }
 
-    progressDisplay.innerHTML = html;
-
-    // スクロール位置を復元
-    progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
-      if (scrollPositions[list.id] !== undefined) list.scrollTop = scrollPositions[list.id];
-    });
-
+  /** progressDisplay にイベントを登録する */
+  function attachProgressEvents() {
     // 地域クリック：ランダムな未塗り国へズーム
     progressDisplay.querySelectorAll('.region-progress').forEach(elem => {
       elem.addEventListener('click', () => {
@@ -852,11 +846,37 @@ document.addEventListener('DOMContentLoaded', () => {
     progressDisplay.querySelectorAll('.toggle-list-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const listEl = document.getElementById(btn.dataset.target);
-        const open   = listEl.style.display === 'none';
+        const open = listEl.style.display === 'none';
         listEl.style.display = open ? 'block' : 'none';
         btn.textContent = open ? '▲' : '▼';
         expandedLists[btn.dataset.region] = open;
       });
+    });
+  }
+
+  /** 進捗表示を更新する **/
+  function updateProgress() {
+    // スクロール位置を保存
+    const scrollPositions = {};
+    progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
+      scrollPositions[list.id] = list.scrollTop;
+    });
+
+    const searchQuery = searchInput.value.trim();
+    if (!searchQuery) { progressDisplay.innerHTML = ''; return; }
+
+    const matchedRegions = getMatchedRegions(searchQuery);
+    if (matchedRegions.length === 0) {
+      progressDisplay.innerHTML = '<div style="color:#999; margin-top:8px;">No matching regions.</div>';
+      return;
+    }
+
+    progressDisplay.innerHTML = buildProgressHTML(matchedRegions);
+    attachProgressEvents();
+
+    // スクロール位置を復元
+    progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
+      if (scrollPositions[list.id] !== undefined) list.scrollTop = scrollPositions[list.id];
     });
   }
 });

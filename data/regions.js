@@ -1,10 +1,10 @@
 const geoUrls = {
   initial:    { countriesLow: './data/countries-low.geojson' },
   background: {
-    countries:      { url: './data/countries.geojson',               type: 'polygon' },
-    usaStates:      { url: './data/usa-states.geojson',              type: 'polygon' },
-    chinaProvinces: { url: './data/china-provinces.geojson',         type: 'polygon' },
-    dateLine:       { url: './data/international-date-line.geojson', type: 'line'    },
+    countries:      { url: './data/countries.geojson', type: 'polygon' },
+    usaStates:      { url: './data/usa-states.geojson', type: 'polygon' },
+    chinaProvinces: { url: './data/china-provinces.geojson', type: 'polygon' },
+    dateLine:       { url: './data/international-date-line.geojson', type: 'line' },
   }
 };
 
