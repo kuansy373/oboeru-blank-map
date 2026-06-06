@@ -71,6 +71,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const progressDisplay = document.getElementById('progress-display');
   const searchToggle = document.getElementById('search-toggle');
   const searchContainer = document.getElementById('search-container');
+  const zoomControlsLeft  = document.getElementById('zoom-controls-left');
+  const zoomControlsRight = document.getElementById('zoom-controls-right');
 
 
   // ==================
@@ -720,7 +722,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // ==================
-  // 検索・トグルボタン
+  // 検索トグル
   // ==================
 
   searchToggle.addEventListener('click', e => {
@@ -729,13 +731,75 @@ document.addEventListener('DOMContentLoaded', () => {
     searchContainer.style.display = isOpen ? 'none' : 'block';
   });
 
-  searchInput.addEventListener('input', updateProgress);
-
   closeButton.addEventListener('click', (e) => {
     e.stopPropagation();
     searchContainer.style.display = 'none';
   });
 
+  // ==================
+  // コマンド定義
+  // ==================
+
+  const commands = [
+    {
+      name: 'zm',
+      pattern: /\.zm(\.[lr])?/,
+      apply(token) {
+        const showLeft  = token === '.zm' || token === '.zm.l';
+        const showRight = token === '.zm' || token === '.zm.r';
+        zoomControlsLeft.style.display  = showLeft  ? 'flex' : 'none';
+        zoomControlsRight.style.display = showRight ? 'flex' : 'none';
+      },
+      reset() {
+        zoomControlsLeft.style.display  = 'none';
+        zoomControlsRight.style.display = 'none';
+      }
+    },
+    // 今後ここに追加
+  ];
+
+  // ==================
+  // 入力パース
+  // ==================
+
+  function parseInput(raw) {
+    let regionPart = raw;
+    const matched = {};
+
+    commands.forEach(cmd => {
+      const m = regionPart.match(cmd.pattern);
+      if (m) {
+        matched[cmd.name] = m[0];
+        regionPart = regionPart.slice(0, m.index) + regionPart.slice(m.index + m[0].length);
+      }
+    });
+
+    const regionQuery = regionPart
+      .split(/[,.]/)
+      .map(t => t.trim())
+      .filter(t => t && !t.startsWith('.'))
+      .join(',');
+
+    return { matched, regionQuery };
+  }
+
+  // ==================
+  // searchInput イベント
+  // ==================
+
+  searchInput.addEventListener('input', () => {
+    const { matched } = parseInput(searchInput.value);
+
+    commands.forEach(cmd => {
+      if (matched[cmd.name]) {
+        cmd.apply(matched[cmd.name]);
+      } else {
+        cmd.reset();
+      }
+    });
+
+    updateProgress();
+  });
 
   // ==================
   // 進捗表示
@@ -862,10 +926,13 @@ document.addEventListener('DOMContentLoaded', () => {
       scrollPositions[list.id] = list.scrollTop;
     });
 
-    const searchQuery = searchInput.value.trim();
-    if (!searchQuery) { progressDisplay.innerHTML = ''; return; }
+    const raw = searchInput.value.trim();
+    const { regionQuery } = parseInput(raw);
 
-    const matchedRegions = getMatchedRegions(searchQuery);
+    if (!regionQuery) { progressDisplay.innerHTML = ''; return; }
+
+    const matchedRegions = getMatchedRegions(regionQuery);
+
     if (matchedRegions.length === 0) {
       progressDisplay.innerHTML = '<div style="color:#999; margin-top:8px;">No matching regions.</div>';
       return;
@@ -879,4 +946,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (scrollPositions[list.id] !== undefined) list.scrollTop = scrollPositions[list.id];
     });
   }
+
+  // ==================
+  // ズームコントロール
+  // ==================
+
+  ['zoom-in-left','zoom-in-right'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => map.zoomIn());
+  });
+  ['zoom-out-left','zoom-out-right'].forEach(id => {
+    document.getElementById(id).addEventListener('click', () => map.zoomOut());
+  });
 });
