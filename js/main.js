@@ -20,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   map.doubleClickZoom.disable();
   map.dragRotate.disable();
   map.touchZoomRotate.disableRotation();
+  map.touchZoomRotate._tapDragZoom.disable();
 
   // レイヤー順（下から上）
   const LAYER_ORDER = ['countries', 'usaStates', 'chinaProvinces' ];
@@ -73,7 +74,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchContainer = document.getElementById('search-container');
   const zoomControlsLeft  = document.getElementById('zoom-controls-left');
   const zoomControlsRight = document.getElementById('zoom-controls-right');
-
+  const aimOverlay = document.getElementById('aim-overlay')
 
   // ==================
   // ユーティリティ関数
@@ -736,70 +737,6 @@ document.addEventListener('DOMContentLoaded', () => {
     searchContainer.style.display = 'none';
   });
 
-  // ==================
-  // コマンド定義
-  // ==================
-
-  const commands = [
-    {
-      name: 'zm',
-      pattern: /\.zm(\.[lr])?/,
-      apply(token) {
-        const showLeft  = token === '.zm' || token === '.zm.l';
-        const showRight = token === '.zm' || token === '.zm.r';
-        zoomControlsLeft.style.display  = showLeft  ? 'flex' : 'none';
-        zoomControlsRight.style.display = showRight ? 'flex' : 'none';
-      },
-      reset() {
-        zoomControlsLeft.style.display  = 'none';
-        zoomControlsRight.style.display = 'none';
-      }
-    },
-    // 今後ここに追加
-  ];
-
-  // ==================
-  // 入力パース
-  // ==================
-
-  function parseInput(raw) {
-    let regionPart = raw;
-    const matched = {};
-
-    commands.forEach(cmd => {
-      const m = regionPart.match(cmd.pattern);
-      if (m) {
-        matched[cmd.name] = m[0];
-        regionPart = regionPart.slice(0, m.index) + regionPart.slice(m.index + m[0].length);
-      }
-    });
-
-    const regionQuery = regionPart
-      .split(/[,.]/)
-      .map(t => t.trim())
-      .filter(t => t && !t.startsWith('.'))
-      .join(',');
-
-    return { matched, regionQuery };
-  }
-
-  // ==================
-  // searchInput イベント
-  // ==================
-
-  searchInput.addEventListener('input', () => {
-    const { matched } = parseInput(searchInput.value);
-
-    commands.forEach(cmd => {
-      if (matched[cmd.name]) {
-        cmd.apply(matched[cmd.name]);
-      } else {
-        cmd.reset();
-      }
-    });
-
-    updateProgress();
-  });
 
   // ==================
   // 進捗表示
@@ -948,13 +885,142 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ==================
+  // コマンド定義
+  // ==================
+
+  const commands = [
+    {
+      name: 'zm',
+      pattern: /;zm(\.[lr])?(\.y-?\d*)?(\.[lr])?(\.y-?\d*)*,?/,
+      apply(token) {
+        const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
+
+        let showLeft  = true;
+        let showRight = true;
+        let yVal      = 50;
+        let yMode     = false;
+
+        parts.forEach(part => {
+          if (part === 'zm') return;
+          if (part === 'r') { showLeft  = false; return; }
+          if (part === 'l') { showRight = false; return; }
+          if (part === 'y') { yMode = true; return; }
+          const yMatch = part.match(/^y(-?\d+)$/);
+          if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
+        });
+
+        // yMode終了
+        if (token.endsWith(',')) yMode = false;
+
+        zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
+        zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
+        zoomControlsLeft.style.bottom     = `${yVal}%`;
+        zoomControlsRight.style.bottom    = `${yVal}%`;
+        zoomControlsLeft.style.transform  = 'translateY(50%)';
+        zoomControlsRight.style.transform = 'translateY(50%)';
+
+        setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
+      },
+      reset() {
+        zoomControlsLeft.style.display  = 'none';
+        zoomControlsRight.style.display = 'none';
+        setZoomBtnText('+', '-');
+      }
+    },
+    {
+      name: 'aim',
+      pattern: /;aim,?/,
+      apply() {
+        aimOverlay.style.display = 'block';
+      },
+      reset() {
+        aimOverlay.style.display = 'none';
+      }
+    },
+  ];
+
+  function setZoomBtnText(inText, outText) {
+    ['zoom-in-left','zoom-in-right'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = inText;
+    });
+    ['zoom-out-left','zoom-out-right'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = outText;
+    });
+  }
+
+  function applyCommands() {
+    const { matched } = parseInput(searchInput.value);
+    commands.forEach(cmd => {
+      if (matched[cmd.name]) cmd.apply(matched[cmd.name]);
+      else cmd.reset();
+    });
+    updateProgress();
+  }
+
+  // ==================
+  // 入力パース
+  // ==================
+
+  function parseInput(raw) {
+    const normalized = raw.replace(/;/g, ',;');
+    let regionPart = normalized;
+    const matched = {};
+
+    commands.forEach(cmd => {
+      const m = regionPart.match(cmd.pattern);
+      if (m) {
+        matched[cmd.name] = m[0];
+        const replacement = m[0].endsWith(',') ? ',' : '';
+        regionPart = regionPart.slice(0, m.index) + replacement + regionPart.slice(m.index + m[0].length);
+      }
+    });
+
+    const regionQuery = regionPart
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t && !t.startsWith(';'))
+      .join(',');
+
+    return { matched, regionQuery };
+  }
+
+  // ==================
+  // searchInput イベント
+  // ==================
+
+  searchInput.addEventListener('input', applyCommands);
+
+  // ==================
   // ズームコントロール
   // ==================
 
+  function moveY(delta) {
+    const raw = searchInput.value;
+    const match = raw.match(/\.y(-?\d*)/);
+    if (!match) return;
+
+    const current = match[1] === '' ? 50 : parseFloat(match[1]);
+    const next    = Math.max(0, Math.min(100, current + delta));
+
+    searchInput.value = raw.replace(/\.y-?\d*/, `.y${next}`);
+
+    applyCommands();
+  }
+
   ['zoom-in-left','zoom-in-right'].forEach(id => {
-    document.getElementById(id).addEventListener('click', () => map.zoomIn());
+    document.getElementById(id).addEventListener('click', () => {
+      const el = document.getElementById(id);
+      if (el.textContent === '↑') moveY(1);
+      else map.zoomIn();
+    });
   });
   ['zoom-out-left','zoom-out-right'].forEach(id => {
-    document.getElementById(id).addEventListener('click', () => map.zoomOut());
+    document.getElementById(id).addEventListener('click', () => {
+      const el = document.getElementById(id);
+      if (el.textContent === '↓') moveY(-1);
+      else map.zoomOut();
+    });
   });
 });
