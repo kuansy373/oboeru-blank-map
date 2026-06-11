@@ -12,7 +12,6 @@
 
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.24.0/dist/maplibre-gl.css" integrity="sha384-uTttxo/aOKbdE5RlD/SPzSDoDmNvGlUYPjONi2MN/b7c9HPSvW07OIuyP7uL6jxK" crossorigin="anonymous">
     <link rel="stylesheet" href="css/style.css">
-
   </head>
   <body>
 
@@ -33,7 +32,7 @@
       <div id="progress-display" class="progress-display"></div>
     </div>
 
-    <!-- <div id="menu-container"> の前に追加 -->
+    <!-- ズームボタン -->
     <div id="zoom-controls-left" class="zoom-controls zoom-left" style="display:none;">
       <button class="zoom-btn" id="zoom-in-left">+</button>
       <button class="zoom-btn" id="zoom-out-left">−</button>
@@ -45,16 +44,14 @@
 
     <!-- メニュー -->
     <div id="menu-container">
-      <div id="menu-row1">
+      <div class="menu-row1">
         <button id="menu-toggle">☰</button>
-        <div id="menu-all-buttons" style="display:none;">
-          <div id="menu-top">
-            <button id="btn-theme" data-en="Theme" data-ja="テーマ"></button>
-            <button id="btn-language" data-en="Language" data-ja="言語"></button>
-          </div>
+        <div id="menu-top" style="display:none;">
+          <button id="btn-theme" data-en="Theme" data-ja="テーマ"></button>
+          <button id="btn-language" data-en="Language" data-ja="言語"></button>
         </div>
       </div>
-      <div id="menu-buttons" style="display:none;">
+      <div id="menu-bottom" style="display:none;">
         <button id="btn-maps" data-en="Maps" data-ja="地図"></button>
         <button id="btn-layers" data-en="Layers" data-ja="レイヤー"></button>
         <button id="btn-regions" data-en="Regions" data-ja="地域"></button>

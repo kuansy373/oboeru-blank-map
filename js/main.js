@@ -53,22 +53,23 @@ document.addEventListener('DOMContentLoaded', () => {
   // DOM参照
   // ==================
 
-  const mapContainer    = document.getElementById('bm-worldmap');
-  const menuToggle    = document.getElementById('menu-toggle');
-  const menuButtons = document.getElementById('menu-buttons');
-  const menuAllButtons = document.getElementById('menu-all-buttons');
-  const btnTheme   = document.getElementById('btn-theme');
+  const mapContainer = document.getElementById('bm-worldmap');
+  const menuContainer = document.getElementById('menu-container');
+  const menuToggle = document.getElementById('menu-toggle');
+  const menuBottom = document.getElementById('menu-bottom');
+  const menuTop = document.getElementById('menu-top');
+  const btnTheme = document.getElementById('btn-theme');
   const themePanel = document.getElementById('theme-panel');
-  const btnLanguage    = document.getElementById('btn-language');
+  const btnLanguage = document.getElementById('btn-language');
   const languagePanel = document.getElementById('language-panel');
   const btnMaps = document.getElementById('btn-maps');
   const mapsPanel = document.getElementById('maps-panel');
   const btnLayers = document.getElementById('btn-layers');
-  const layersPanel   = document.getElementById('layers-panel');
-  const btnRegions    = document.getElementById('btn-regions');
-  const regionControl   = document.getElementById('region-control');
-  const searchInput     = document.getElementById('search-input');
-  const closeButton     = document.getElementById('close-button');
+  const layersPanel = document.getElementById('layers-panel');
+  const btnRegions = document.getElementById('btn-regions');
+  const regionControl = document.getElementById('region-control');
+  const searchInput = document.getElementById('search-input');
+  const closeButton = document.getElementById('close-button');
   const progressDisplay = document.getElementById('progress-display');
   const searchToggle = document.getElementById('search-toggle');
   const searchContainer = document.getElementById('search-container');
@@ -256,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (!filledFeatures[id]) {
           fillFeature(key, id, fillColor);
-          updateProgress();
+          updateProgress(getCurrentRegionQuery());
         } else {
           // 塗り済みの場合：ポップアップでリセット可能にする
           const popup = new maplibregl.Popup()
@@ -276,7 +277,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('resetColorBtn')?.addEventListener('click', () => {
               clearFeature(key, id);
               popup.remove();
-              updateProgress();
+              updateProgress(getCurrentRegionQuery());
             });
           }, 0);
         }
@@ -563,7 +564,7 @@ document.addEventListener('DOMContentLoaded', () => {
       colorBox.addEventListener('click', e => {
         e.stopPropagation();
         applyToRegionFeatures(region, (key, fId) => fillFeature(key, fId, color));
-        updateProgress();
+        updateProgress(getCurrentRegionQuery());
       });
 
       // 地域名クリック：その地域にズーム
@@ -578,7 +579,7 @@ document.addEventListener('DOMContentLoaded', () => {
       resetBtn.addEventListener('click', e => {
         e.stopPropagation();
         applyToRegionFeatures(region, (key, fId) => clearFeature(key, fId));
-        updateProgress();
+        updateProgress(getCurrentRegionQuery());
       });
 
       regionItem.append(colorBox, label, resetBtn);
@@ -639,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelectorAll('input[name="language"]').forEach(radio => {
     radio.addEventListener('change', e => {
       currentLang = e.target.value;
-      updateProgress();
+      updateProgress(getCurrentRegionQuery());
       buildRegionControl();
       updateButtonTexts();
     });
@@ -648,6 +649,12 @@ document.addEventListener('DOMContentLoaded', () => {
   // ==================
   // メニュー開閉
   // ==================
+
+  // z-indexの動的管理
+  let topZIndex = 10;
+  function bringToFront(element) {
+    element.style.zIndex = ++topZIndex;
+  }
 
   let activePanel = null;
   let activeBtn = null;
@@ -686,9 +693,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   menuToggle.addEventListener('click', e => {
     e.stopPropagation();
-    const isOpen = menuAllButtons.style.display !== 'none';
-    menuAllButtons.style.display = isOpen ? 'none' : 'flex';
-    menuButtons.style.display = isOpen ? 'none' : 'flex';
+    const isOpen = menuTop.style.display !== 'none';
+    menuTop.style.display = isOpen ? 'none' : 'flex';
+    menuBottom.style.display = isOpen ? 'none' : 'flex';
+    bringToFront(menuContainer);
     if (isOpen) {
       hidePanels();
     } else if (activePanel) {
@@ -698,8 +706,8 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   document.addEventListener('click', () => {
-    menuAllButtons.style.display = 'none';
-    menuButtons.style.display = 'none';
+    menuTop.style.display = 'none';
+    menuBottom.style.display = 'none';
     hidePanels();
   });
 
@@ -730,6 +738,7 @@ document.addEventListener('DOMContentLoaded', () => {
     e.stopPropagation();
     const isOpen = getComputedStyle(searchContainer).display !== 'none';
     searchContainer.style.display = isOpen ? 'none' : 'block';
+    bringToFront(searchContainer);
   });
 
   closeButton.addEventListener('click', (e) => {
@@ -737,6 +746,131 @@ document.addEventListener('DOMContentLoaded', () => {
     searchContainer.style.display = 'none';
   });
 
+  // ==================
+  // コマンド定義
+  // ==================
+
+  const commands = [
+    {
+      name: 'zm',
+      pattern: /;zm(\.[lr])?(\.y-?\d*)?(\.[lr])?(\.y-?\d*)*,?/,
+      apply(token) {
+        const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
+
+        let showLeft  = true;
+        let showRight = true;
+        let yVal      = 50;
+        let yMode     = false;
+
+        parts.forEach(part => {
+          if (part === 'zm') return;
+          if (part === 'r') { showLeft  = false; return; }
+          if (part === 'l') { showRight = false; return; }
+          if (part === 'y') { yMode = true; return; }
+          const yMatch = part.match(/^y(-?\d+)$/);
+          if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
+        });
+
+        // yMode終了
+        if (token.endsWith(',')) yMode = false;
+
+        zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
+        zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
+        zoomControlsLeft.style.bottom     = `${yVal}%`;
+        zoomControlsRight.style.bottom    = `${yVal}%`;
+        zoomControlsLeft.style.transform  = 'translateY(50%)';
+        zoomControlsRight.style.transform = 'translateY(50%)';
+
+        setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
+      },
+      reset() {
+        zoomControlsLeft.style.display  = 'none';
+        zoomControlsRight.style.display = 'none';
+        setZoomBtnText('+', '-');
+      }
+    },
+    {
+      name: 'aim',
+      pattern: /;aim(\.[wh]\d+|\.wh\d+|\.o\d+)*,?/,
+      apply(token) {
+        const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
+
+        let w = 24;
+        let h = 24;
+
+        parts.forEach(part => {
+          if (part === 'aim') return;
+          const whMatch = part.match(/^wh(\d+)$/);
+          if (whMatch) { w = parseInt(whMatch[1]); h = parseInt(whMatch[1]); return; }
+          const wMatch = part.match(/^w(\d+)$/);
+          if (wMatch) { w = parseInt(wMatch[1]); return; }
+          const hMatch = part.match(/^h(\d+)$/);
+          if (hMatch) { h = parseInt(hMatch[1]); return; }
+          const oMatch = part.match(/^o(\d+)$/);
+          if (oMatch) { aimOverlay.style.opacity = parseInt(oMatch[1]) / 100; return; }
+        });
+
+        aimOverlay.style.display = 'block';
+        aimOverlay.style.width   = `${w}px`;
+        aimOverlay.style.height  = `${h}px`;
+      },
+      reset() {
+        aimOverlay.style.display = 'none';
+        aimOverlay.style.opacity = '1';
+      }
+    },
+  ];
+
+  function setZoomBtnText(inText, outText) {
+    ['zoom-in-left','zoom-in-right'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = inText;
+    });
+    ['zoom-out-left','zoom-out-right'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = outText;
+    });
+  }
+
+  function applyCommands() {
+    const { matched, regionQuery } = parseInput(searchInput.value);
+    commands.forEach(cmd => {
+      if (matched[cmd.name]) cmd.apply(matched[cmd.name]);
+      else cmd.reset();
+    });
+    updateProgress(regionQuery);
+  }
+
+  // ==================
+  // 入力パース
+  // ==================
+
+  function parseInput(raw) {
+    const normalized = raw.replace(/;/g, ',;');
+    let regionPart = normalized;
+    const matched = {};
+
+    commands.forEach(cmd => {
+      const m = regionPart.match(cmd.pattern);
+      if (m) {
+        matched[cmd.name] = m[0];
+        const replacement = m[0].endsWith(',') ? ',' : '';
+        regionPart = regionPart.slice(0, m.index) + replacement + regionPart.slice(m.index + m[0].length);
+      }
+    });
+
+    const regionQuery = regionPart
+      .split(',')
+      .map(t => t.trim())
+      .filter(t => t && !t.startsWith(';'))
+      .join(',');
+
+    return { matched, regionQuery };
+  }
+
+  function getCurrentRegionQuery() {
+    return parseInput(searchInput.value).regionQuery;
+  }
 
   // ==================
   // 進捗表示
@@ -856,15 +990,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   /** 進捗表示を更新する **/
-  function updateProgress() {
+  function updateProgress(regionQuery) {
     // スクロール位置を保存
     const scrollPositions = {};
     progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
       scrollPositions[list.id] = list.scrollTop;
     });
-
-    const raw = searchInput.value.trim();
-    const { regionQuery } = parseInput(raw);
 
     if (!regionQuery) { progressDisplay.innerHTML = ''; return; }
 
@@ -884,132 +1015,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // ==================
-  // コマンド定義
-  // ==================
-
-  const commands = [
-    {
-      name: 'zm',
-      pattern: /;zm(\.[lr])?(\.y-?\d*)?(\.[lr])?(\.y-?\d*)*,?/,
-      apply(token) {
-        const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
-
-        let showLeft  = true;
-        let showRight = true;
-        let yVal      = 50;
-        let yMode     = false;
-
-        parts.forEach(part => {
-          if (part === 'zm') return;
-          if (part === 'r') { showLeft  = false; return; }
-          if (part === 'l') { showRight = false; return; }
-          if (part === 'y') { yMode = true; return; }
-          const yMatch = part.match(/^y(-?\d+)$/);
-          if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
-        });
-
-        // yMode終了
-        if (token.endsWith(',')) yMode = false;
-
-        zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
-        zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
-        zoomControlsLeft.style.bottom     = `${yVal}%`;
-        zoomControlsRight.style.bottom    = `${yVal}%`;
-        zoomControlsLeft.style.transform  = 'translateY(50%)';
-        zoomControlsRight.style.transform = 'translateY(50%)';
-
-        setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
-      },
-      reset() {
-        zoomControlsLeft.style.display  = 'none';
-        zoomControlsRight.style.display = 'none';
-        setZoomBtnText('+', '-');
-      }
-    },
-    {
-      name: 'aim',
-      pattern: /;aim(\.[wh]\d+|\.wh\d+|\.o\d+)*,?/,
-      apply(token) {
-        const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
-
-        let w = 24;
-        let h = 24;
-
-        parts.forEach(part => {
-          if (part === 'aim') return;
-          const whMatch = part.match(/^wh(\d+)$/);
-          if (whMatch) { w = parseInt(whMatch[1]); h = parseInt(whMatch[1]); return; }
-          const wMatch = part.match(/^w(\d+)$/);
-          if (wMatch) { w = parseInt(wMatch[1]); return; }
-          const hMatch = part.match(/^h(\d+)$/);
-          if (hMatch) { h = parseInt(hMatch[1]); return; }
-          const oMatch = part.match(/^o(\d+)$/);
-          if (oMatch) { aimOverlay.style.opacity = parseInt(oMatch[1]) / 100; return; }
-        });
-
-        aimOverlay.style.display = 'block';
-        aimOverlay.style.width   = `${w}px`;
-        aimOverlay.style.height  = `${h}px`;
-      },
-      reset() {
-        aimOverlay.style.display = 'none';
-        aimOverlay.style.opacity = '1';
-      }
-    },
-  ];
-
-  function setZoomBtnText(inText, outText) {
-    ['zoom-in-left','zoom-in-right'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = inText;
-    });
-    ['zoom-out-left','zoom-out-right'].forEach(id => {
-      const el = document.getElementById(id);
-      if (el) el.textContent = outText;
-    });
-  }
-
-  function applyCommands() {
-    const { matched } = parseInput(searchInput.value);
-    commands.forEach(cmd => {
-      if (matched[cmd.name]) cmd.apply(matched[cmd.name]);
-      else cmd.reset();
-    });
-    updateProgress();
-  }
-
-  // ==================
-  // 入力パース
-  // ==================
-
-  function parseInput(raw) {
-    const normalized = raw.replace(/;/g, ',;');
-    let regionPart = normalized;
-    const matched = {};
-
-    commands.forEach(cmd => {
-      const m = regionPart.match(cmd.pattern);
-      if (m) {
-        matched[cmd.name] = m[0];
-        const replacement = m[0].endsWith(',') ? ',' : '';
-        regionPart = regionPart.slice(0, m.index) + replacement + regionPart.slice(m.index + m[0].length);
-      }
-    });
-
-    const regionQuery = regionPart
-      .split(',')
-      .map(t => t.trim())
-      .filter(t => t && !t.startsWith(';'))
-      .join(',');
-
-    return { matched, regionQuery };
-  }
 
   // ==================
   // searchInput イベント
   // ==================
 
+  searchContainer.addEventListener('click', e => e.stopPropagation());
   searchInput.addEventListener('input', applyCommands);
 
   // ==================
@@ -1031,13 +1042,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
   function zoomAt(delta) {
-    const canvas = map.getCanvas();
-    const rect   = canvas.getBoundingClientRect();
-    const aim    = document.getElementById('aim-overlay');
-    const aimRect = aim.getBoundingClientRect();
+    const canvas  = map.getCanvas();
+    const rect    = canvas.getBoundingClientRect();
 
-    const x = aimRect.left + aimRect.width  / 2 - rect.left;
-    const y = aimRect.top  + aimRect.height / 2 - rect.top;
+    let x, y;
+    if (aimOverlay.style.display !== 'none') {
+      const aimRect = aimOverlay.getBoundingClientRect();
+      x = aimRect.left + aimRect.width  / 2 - rect.left;
+      y = aimRect.top  + aimRect.height / 2 - rect.top;
+    } else {
+      x = rect.width  / 2;
+      y = rect.height / 2;
+    }
 
     map.easeTo({
       zoom: map.getZoom() + delta,
@@ -1046,15 +1062,15 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   ['zoom-in-left','zoom-in-right'].forEach(id => {
-    document.getElementById(id).addEventListener('click', () => {
-      const el = document.getElementById(id);
+    const el = document.getElementById(id);
+    el.addEventListener('click', () => {
       if (el.textContent === '↑') moveY(1);
       else zoomAt(1);
     });
   });
   ['zoom-out-left','zoom-out-right'].forEach(id => {
-    document.getElementById(id).addEventListener('click', () => {
-      const el = document.getElementById(id);
+    const el = document.getElementById(id);
+    el.addEventListener('click', () => {
       if (el.textContent === '↓') moveY(-1);
       else zoomAt(-1);
     });
