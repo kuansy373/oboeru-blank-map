@@ -4,6 +4,7 @@ const geoUrls = {
     countries:      { url: './data/countries.geojson', type: 'polygon' },
     usaStates:      { url: './data/usa-states.geojson', type: 'polygon' },
     chinaProvinces: { url: './data/china-provinces.geojson', type: 'polygon' },
+    japanPrefectures: { url: './data/japan-prefectures.geojson', type: 'polygon' },
     dateLine:       { url: './data/international-date-line.geojson', type: 'line' },
   }
 };
@@ -21,6 +22,7 @@ const regionColors = {
   Default: '#000000',
   'USA States': '#98ccae',
   'China Provinces': '#eda398',
+  'Japan Prefectures': '#ffd3cf',
 };
 
 // ビュー設定
@@ -35,6 +37,7 @@ const regionView = {
   'Antarctica': { center: [70, -80], zoom: 1.5 },
   'USA States': { center: [-97, 40], zoom: 3 },
   'China Provinces': { center: [105, 37], zoom: 3 },
+  'Japan Prefectures': { center: [138.7, 37.6], zoom: 4 },
 };
 
 // 判定用リスト
@@ -156,3 +159,4 @@ const countryRegions = {
 
 countryRegions['USA States'] = [];
 countryRegions['China Provinces'] = [];
+countryRegions['Japan Prefectures'] = [];

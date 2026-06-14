@@ -57,3 +57,8 @@ The following third-party components are included under their respective license
       - Copyright (c) Amll
       - https://github.com/BarbarossaWang/cn-atlas
       - Data source: ruiduobao/shengshixian.com
+
+   -4. jp-prefectures
+      - MIT License
+      - Copyright (c) piuccio
+      - https://github.com/piuccio/open-data-jp-prefectures-geojson
