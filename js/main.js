@@ -859,6 +859,24 @@ document.addEventListener('DOMContentLoaded', () => {
         aimOverlay.style.opacity = '1';
       }
     },
+    {
+      name: 'loc',
+      pattern: /;loc(\.\d+)?[,;]?/,
+      apply(token) {
+        const parts = token.replace(/^;/, '').replace(/[,;]$/, '').split('.').filter(Boolean);
+        const digits = parts[1] !== undefined ? parseInt(parts[1]) : 0;
+
+        const center = map.getCenter();
+        const zoom = map.getZoom().toFixed(digits);
+        const lng = center.lng.toFixed(digits);
+        const lat = center.lat.toFixed(digits);
+        locDisplay.textContent = `center: [${lng}, ${lat}], zoom: ${zoom}`;
+        locDisplay.style.display = 'block';
+      },
+      reset() {
+        locDisplay.style.display = 'none';
+      }
+    },
   ];
 
   function setZoomBtnText(inText, outText) {
@@ -1141,6 +1159,11 @@ document.addEventListener('DOMContentLoaded', () => {
   attachProgressEvents();
   searchContainer.addEventListener('click', e => e.stopPropagation());
   searchInput.addEventListener('input', applyCommands);
+
+  map.on('move', () => {
+    const { matched } = parseInput(searchInput.value);
+    if (matched.loc) commands.find(c => c.name === 'loc').apply(matched.loc);
+  });
 
   window.addEventListener('resize', () => {
     if (aimOverlay.style.display !== 'none') applyCommands();

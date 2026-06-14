@@ -55,6 +55,16 @@ body {
 }
 
 
+#loc-display {
+  display: none;
+  position: fixed;
+  bottom: 8px;
+  left: 8px;
+  font-family: monospace;
+  font-size: 1.2em;
+}
+
+
 
 
 
