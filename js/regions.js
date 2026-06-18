@@ -1,4 +1,4 @@
-const geoUrls = {
+export const geoUrls = {
   initial:    { countriesLow: './data/countries-low.geojson' },
   background: {
     countries:      { url: './data/countries.geojson', type: 'polygon' },
@@ -10,7 +10,7 @@ const geoUrls = {
 };
 
 // 地域別カラー設定
-const regionColors = {
+export const regionColors = {
   Europe: '#50bab5',
   Africa: '#81ca98',
   'Middle East': '#b2b379',
@@ -26,7 +26,7 @@ const regionColors = {
 };
 
 // ビュー設定
-const regionView = {
+export const regionView = {
   'Europe': { center: [14, 52], zoom: 2.7 },
   'Africa': { center: [17, 5], zoom: 2.4 },
   'Middle East': { center: [50, 30], zoom: 2.7 },
@@ -41,7 +41,7 @@ const regionView = {
 };
 
 // 判定用リスト
-const countryRegions = {
+export const countryRegions = {
   Europe: [
     'Albania','Andorra','Armenia','Austria','Azerbaijan',
     'Belarus','Belgium','Bosnia and Herzegovina','Bulgaria',

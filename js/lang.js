@@ -1,3 +1,32 @@
+let currentLang = 'en';
+
+export function setLang(lang) {
+  currentLang = lang;
+}
+
+export function getMessage(key) {
+  return messages[key][currentLang];
+}
+
+export function getDisplayName(name) {
+  return currentLang === 'ja' ? (translations[name] || name) : name;
+}
+
+export function getRegionDisplayName(region) {
+  if (currentLang === 'ja') return regionNameJa[region] || region;
+  return region;
+}
+
+export function updateButtonTexts(lang) {
+  document.querySelectorAll('[data-en][data-ja]').forEach(el => {
+    const text = lang === 'ja' ? el.dataset.ja : el.dataset.en;
+    if (el.tagName === 'INPUT') el.placeholder = text;
+    else el.textContent = text;
+  });
+}
+
+// ==================
+
 const messages = {
   noViewSettings: { en: 'has no view settings', ja: 'のビュー設定がありません' },
 };
@@ -281,6 +310,7 @@ const translations = {
   "Alaska": "アラスカ",
   "Hawaii": "ハワイ",
   "District of Columbia": "ワシントンD.C.",
+  /* 中国 */
   "Xinjiang": "新疆",
   "Xizang": "チベット",
   "Inner Mongol": "内モンゴル",
