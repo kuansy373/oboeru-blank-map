@@ -24,29 +24,22 @@ function isCoveredByUpperLayer(key, point) {
 // ポップアップ
 // ==================
 
+function buildPopup(lngLat, html) {
+  return new maplibregl.Popup({ closeOnClick: false })
+    .setLngLat(lngLat)
+    .setHTML(html)
+    .addTo(map);
+}
+
 function createResetPopup(key, id, name, region, lngLat) {
   if (openCountryPopups.has(id)) {
-    openCountryPopups.get(id).popup.remove();
-    openCountryPopups.delete(id);
+    openCountryPopups.get(id).popup.setLngLat(lngLat);
     return;
   }
 
-  const popup = new maplibregl.Popup()
-    .setLngLat(lngLat)
-    .setHTML(buildCountryPopupHTML(name, region, id))
-    .addTo(map);
-
+  const popup = buildPopup(lngLat, buildCountryPopupHTML(name, region, id));
   openCountryPopups.set(id, { popup, key, name, region });
   popup.on('close', () => openCountryPopups.delete(id));
-
-  setTimeout(() => {
-    popup.getElement().querySelector('.popup-reset-btn')
-      ?.addEventListener('click', () => {
-        clearFeature(key, id);
-        popup.remove();
-        _updateProgress(_getCurrentRegionQuery());
-      });
-  }, 0);
 }
 
 function buildCountryPopupHTML(name, region, id) {
@@ -81,15 +74,33 @@ function toggleFeatureFill(key, e) {
   }
 }
 
+function closeAllPopupsExcept(excludeId = null) {
+  for (const [id, { popup }] of openCountryPopups) {
+    if (id !== excludeId) {
+      popup.remove();
+    }
+  }
+}
+
 function registerCountryClickEvents() {
   LAYER_ORDER.forEach(key => {
     map.on('click', `${key}-fill`, e => {
       if (isCoveredByUpperLayer(key, e.point)) return;
+      const featureId = getFeatureId(key, e.features[0]);
+      closeAllPopupsExcept(featureId);
       toggleFeatureFill(key, e);
     });
 
     map.on('mouseenter', `${key}-fill`, () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', `${key}-fill`, () => { map.getCanvas().style.cursor = ''; });
+  });
+
+  map.on('click', e => {
+    const fillLayers = LAYER_ORDER.map(k => `${k}-fill`);
+    const features = map.queryRenderedFeatures(e.point, { layers: fillLayers });
+    if (features.length === 0) {
+      closeAllPopupsExcept();
+    }
   });
 }
 
@@ -99,23 +110,28 @@ function registerCountryClickEvents() {
 
 // Map: key=uniqueId, value={ layerId, sourceId }
 const highlightedLines = new Map();
+const highlightedLinePopups = new Map();
+
+function buildLineLabel(uniqueId) {
+  if (uniqueId === 'date_line') return getDisplayName('International Date Line');
+  const [prefix, deg] = uniqueId.startsWith('lon_')
+    ? ['Lng: ', uniqueId.slice(4)]
+    : ['Lat: ', uniqueId.slice(4)];
+  return getDisplayName(prefix) + deg + '°';
+}
 
 function getLineInfo(layerId, feature) {
-  const isMeridian = layerId === 'meridians-line-hitarea';
-  const isDateLine = layerId === 'dateLine-line-hitarea';
-
-  if (isDateLine) {
+  if (layerId === 'dateLine-line-hitarea') {
     return {
       uniqueId: 'date_line',
-      label: getDisplayName('International Date Line'),
       highlightFeature: geojsonData.dateLine.features[0]
     };
   }
 
+  const isMeridian = layerId === 'meridians-line-hitarea';
   const coords = feature.geometry.coordinates;
   const degree = Math.round(isMeridian ? coords[0][0] : coords[0][1]);
   const uniqueId = (isMeridian ? 'lon_' : 'lat_') + degree;
-  const label = getDisplayName(isMeridian ? 'Lng: ' : 'Lat: ') + degree + '°';
   const highlightFeature = {
     type: 'Feature',
     geometry: {
@@ -126,7 +142,36 @@ function getLineInfo(layerId, feature) {
     }
   };
 
-  return { uniqueId, label, highlightFeature };
+  return { uniqueId, highlightFeature };
+}
+
+function removeHighlightLine(uniqueId) {
+  const info = highlightedLines.get(uniqueId);
+  if (!info) return;
+
+  highlightedLinePopups.get(uniqueId)?.remove();
+  highlightedLinePopups.delete(uniqueId);
+
+  if (map.getLayer(info.layerId))   map.removeLayer(info.layerId);
+  if (map.getSource(info.sourceId)) map.removeSource(info.sourceId);
+  highlightedLines.delete(uniqueId);
+}
+
+function addHighlightLine(uniqueId, highlightFeature, lngLat) {
+  const hlLayerId  = `highlight-line-${uniqueId}`;
+  const hlSourceId = `highlight-source-${uniqueId}`;
+
+  map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
+  map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId,
+    paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
+  map.moveLayer(hlLayerId);
+
+  const label = buildLineLabel(uniqueId);
+  const popup = new maplibregl.Popup().setLngLat(lngLat)
+    .setHTML(`<strong>${label}</strong>`).addTo(map);
+
+  highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId });
+  highlightedLinePopups.set(uniqueId, popup);
 }
 
 function registerLineClickEvents() {
@@ -143,25 +188,14 @@ function registerLineClickEvents() {
         if (meridianFeatures.length > 0) return;
       }
 
-      const { uniqueId, label, highlightFeature } = getLineInfo(layerId, e.features[0]);
-      const hlLayerId  = `highlight-line-${uniqueId}`;
-      const hlSourceId = `highlight-source-${uniqueId}`;
+      const { uniqueId, highlightFeature } = getLineInfo(layerId, e.features[0]);
 
       if (highlightedLines.has(uniqueId)) {
-        if (map.getLayer(hlLayerId))   map.removeLayer(hlLayerId);
-        if (map.getSource(hlSourceId)) map.removeSource(hlSourceId);
-        highlightedLines.delete(uniqueId);
+        removeHighlightLine(uniqueId);
         return;
       }
 
-      map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
-      map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId, paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
-      map.moveLayer(hlLayerId);
-      const linePopup = new maplibregl.Popup()
-        .setLngLat(e.lngLat)
-        .setHTML(`<strong>${label}</strong>`)
-        .addTo(map);
-      highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId, label, lngLat: e.lngLat, popup: linePopup });
+      addHighlightLine(uniqueId, highlightFeature, e.lngLat);
     });
 
     map.on('mousemove', layerId, e => {
@@ -174,40 +208,32 @@ function registerLineClickEvents() {
 }
 
 export function refreshOpenPopups() {
-  for (const [id, { popup, key, name, region }] of openCountryPopups) {
+  for (const [id, { popup, name, region }] of openCountryPopups) {
     popup.setHTML(buildCountryPopupHTML(name, region, id));
-    popup.getElement().querySelector('.popup-reset-btn')
-      ?.addEventListener('click', () => {
-        clearFeature(key, id);
-        popup.remove();
-        _updateProgress(_getCurrentRegionQuery());
-      });
   }
 
-  for (const [uniqueId, info] of highlightedLines) {
-    if (!info.popup) continue;
-    const newLabel = relabelLine(uniqueId);
-    info.popup.setHTML(`<strong>${newLabel}</strong>`);
-    info.label = newLabel;
+  for (const [uniqueId, popup] of highlightedLinePopups) {
+    const newLabel = buildLineLabel(uniqueId);
+    popup.setHTML(`<strong>${newLabel}</strong>`);
   }
-}
-
-function relabelLine(uniqueId) {
-  if (uniqueId === 'date_line') return getDisplayName('International Date Line');
-  if (uniqueId.startsWith('lon_')) {
-    const deg = uniqueId.slice(4);
-    return getDisplayName('Lng: ') + deg + '°';
-  }
-  if (uniqueId.startsWith('lat_')) {
-    const deg = uniqueId.slice(4);
-    return getDisplayName('Lat: ') + deg + '°';
-  }
-  return uniqueId;
 }
 
 // ==================
 // 初期化（エントリーポイント）
 // ==================
+
+function registerGlobalResetHandler() {
+  document.addEventListener('click', e => {
+    const btn = e.target.closest('.popup-reset-btn');
+    if (!btn) return;
+    const id = btn.dataset.featureId;
+    const entry = openCountryPopups.get(id);
+    if (!entry) return;
+    clearFeature(entry.key, id);
+    entry.popup.remove();
+    _updateProgress(_getCurrentRegionQuery());
+  });
+}
 
 export function initMapEvents(_map, {
   updateProgress,
@@ -216,6 +242,7 @@ export function initMapEvents(_map, {
   map                  = _map;
   _updateProgress      = updateProgress;
   _getCurrentRegionQuery = getCurrentRegionQuery;
+  registerGlobalResetHandler();
 }
 
 export function registerClickEvents() {
