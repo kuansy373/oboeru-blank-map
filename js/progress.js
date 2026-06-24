@@ -90,7 +90,7 @@ function buildCommandsSectionHTML() {
     </div>
     <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
       ${activeCommandsHTML}
-      <div><a href="https://github.com/kuansy373/anki-world-map#readme" target="_blank">${getDisplayName('README')}</a></div>
+      <div><a href="https://github.com/kuansy373/oboeru-blank-map#readme" target="_blank">${getDisplayName('README')}</a></div>
     </div>
   `;
 }

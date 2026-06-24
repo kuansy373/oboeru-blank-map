@@ -1,4 +1,4 @@
-# anki-world-map
+# oboeru-blank-map
 
 国名を覚えるための白地図です。
 > https://kuansy373.github.io/anki-world-map/
