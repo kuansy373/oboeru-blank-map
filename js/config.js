@@ -1,9 +1,10 @@
-export const LAYER_ORDER = ['countries', 'usaStates', 'chinaProvinces', 'japanPrefectures'];
+export const LAYER_ORDER = ['countries', 'usaStates', 'chinaProvinces', 'japanPrefectures', 'japanOldProvinces'];
 
 export const REGION_TO_SOURCE = {
   'USA States':        'usaStates',
   'China Provinces':   'chinaProvinces',
   'Japan Prefectures': 'japanPrefectures',
+  'Japan Old Provinces': 'japanOldProvinces',
 };
 
 export const SOURCE_KEY_TO_REGION = Object.fromEntries(

@@ -20,6 +20,10 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
+Note: The MIT License above does not apply to `data/japan_old_provinces.geojson.geojson`, which is
+derived from data licensed under CC BY-NC (Non-Commercial). That file may NOT
+be used for commercial purposes. See "4. Geo data -3. Japan Old Provinces" below.
+
 ---
 
 The following third-party components are included under their respective licenses.
@@ -53,7 +57,17 @@ The following third-party components are included under their respective license
       - https://github.com/nvkelso/natural-earth-vector
       - Source: ne_10m_admin_1_states_provinces.geojson
 
-   -3. Natural Earth (International Date Line)
+   -3. Japan Old Provinces
+      - License: CC BY-NC
+      - Provider: Inter-university Research Institute Corporation, National Institutes for the Humanities (NIHU)
+      - Source: "Bakumatsu-Meiji Boundary Data" (幕末明治地勢地図境界データ)
+      - https://www.bridge.nihu.jp/researchdata/file/18045150
+      - Converted from SHP to GeoJSON using GDAL/ogr2ogr (MIT License, https://gdal.org)
+      - Simplified using Mapshaper (https://mapshaper.org)
+      - Coordinates rounded to 6 decimal places
+      - Non-commercial use only
+
+   -4. Natural Earth (International Date Line)
       - Public Domain
       - https://www.naturalearthdata.com/
       - Source: ne_110m_geographic_lines

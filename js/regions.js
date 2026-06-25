@@ -1,11 +1,12 @@
 export const geoUrls = {
   initial:    { countriesLow: './data/countries-low.geojson' },
   background: {
-    countries:      { url: './data/countries.geojson', type: 'polygon' },
-    usaStates:      { url: './data/us_states.geojson', type: 'polygon' },
-    chinaProvinces: { url: './data/china_provinces.geojson', type: 'polygon' },
-    japanPrefectures: { url: './data/japan_prefectures.geojson', type: 'polygon' },
-    dateLine:       { url: './data/international-date-line.geojson', type: 'line' },
+    countries:         { url: './data/countries.geojson', type: 'polygon' },
+    usaStates:         { url: './data/us_states.geojson', type: 'polygon' },
+    chinaProvinces:    { url: './data/china_provinces.geojson', type: 'polygon' },
+    japanPrefectures:  { url: './data/japan_prefectures.geojson', type: 'polygon' },
+    japanOldProvinces: { url: './data/japan_old_provinces.geojson', type: 'polygon' },
+    dateLine:          { url: './data/international-date-line.geojson', type: 'line' },
   }
 };
 
@@ -23,6 +24,7 @@ export const regionColors = {
   'USA States': '#98ccae',
   'China Provinces': '#eda398',
   'Japan Prefectures': '#ffd3cf',
+  'Japan Old Provinces': '#adb1de',
 };
 
 // ビュー設定
@@ -38,6 +40,7 @@ export const regionView = {
   'USA States': { center: [-97, 40], zoom: 3 },
   'China Provinces': { center: [105, 37], zoom: 3 },
   'Japan Prefectures': { center: [138.7, 37.6], zoom: 4 },
+  'Japan Old Provinces': { center: [138.7, 37.6], zoom: 4 },
 };
 
 // 判定用リスト
@@ -160,3 +163,4 @@ export const countryRegions = {
 countryRegions['USA States'] = [];
 countryRegions['China Provinces'] = [];
 countryRegions['Japan Prefectures'] = [];
+countryRegions['Japan Old Provinces'] = [];

@@ -118,7 +118,7 @@ function initLayersPanel() {
 // ==================
 
 const nestedChildren = {
-  Asia: ['China Provinces', 'Japan Prefectures'],
+  Asia: ['China Provinces', 'Japan Prefectures', 'Japan Old Provinces'],
   'North America': ['USA States'],
 };
 
