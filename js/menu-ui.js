@@ -37,22 +37,40 @@ let activePanel = null;
 let activeBtn   = null;
 let menuItems;
 
+let outsideClickEnabled = true;
+
+function setMenuVisible(visible) {
+  const display = visible ? 'flex' : 'none';
+  menuTop.style.display    = display;
+  menuBottom.style.display = display;
+}
+
+function setToggleStyle(state) {
+  if (state === 'open') {
+    menuToggle.style.border       = '';
+    menuToggle.style.borderStyle  = 'double';
+  } else if (state === 'locked') {
+    menuToggle.style.border       = '2px groove #e0dfdf';
+    menuToggle.textContent = '✕';
+  } else {
+    menuToggle.style.border       = '';
+    menuToggle.style.borderStyle = '';
+    menuToggle.textContent = '☰';
+  }
+}
+
 function hidePanels() {
   menuItems.forEach(([btn, panel]) => {
     panel.style.display = 'none';
     btn.classList.remove('active');
   });
-}
-
-function closeAllPanels() {
-  hidePanels();
   activePanel = null;
   activeBtn   = null;
 }
 
 function togglePanel(panel, btn) {
   const isOpen = panel.style.display !== 'none';
-  closeAllPanels();
+  hidePanels();
   if (!isOpen) {
     panel.style.display = 'block';
     btn.classList.add('active');
@@ -64,22 +82,31 @@ function togglePanel(panel, btn) {
 function initMenuToggle() {
   menuToggle.addEventListener('click', e => {
     e.stopPropagation();
-    const isOpen  = menuTop.style.display !== 'none';
-    const display = isOpen ? 'none' : 'flex';
-    menuTop.style.display    = display;
-    menuBottom.style.display = display;
-    bringToFront(menuContainer);
-    if (isOpen) {
+    const isOpen = menuTop.style.display !== 'none';
+
+    if (!isOpen) {
+      setMenuVisible(true);
+      setToggleStyle('open');
+      bringToFront(menuContainer);
+      if (activePanel) {
+        activePanel.style.display = 'block';
+        activeBtn?.classList.add('active');
+      }
+    } else if (outsideClickEnabled) {
+      outsideClickEnabled = false;
+      setToggleStyle('locked');
+    } else {
+      outsideClickEnabled = true;
+      setMenuVisible(false);
+      setToggleStyle('');
       hidePanels();
-    } else if (activePanel) {
-      activePanel.style.display = 'block';
-      activeBtn?.classList.add('active');
     }
   });
 
   document.addEventListener('click', () => {
-    menuTop.style.display    = 'none';
-    menuBottom.style.display = 'none';
+    if (!outsideClickEnabled) return;
+    setMenuVisible(false);
+    setToggleStyle('');
     hidePanels();
   });
 
