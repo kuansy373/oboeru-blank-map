@@ -7,22 +7,7 @@ import { getCurrentRegionQuery } from './commands.js';
 
 let map;
 let mapContainer;
-
-// DOM要素
-let menuContainer;
-let menuToggle;
-let menuTop;
-let menuBottom;
-let btnTheme;
-let themePanel;
-let btnLanguage;
-let languagePanel;
-let btnMaps;
-let mapsPanel;
-let btnLayers;
-let layersPanel;
-let btnRegions;
-let regionControl;
+let domRefs;
 
 // ==================
 // メニュー開閉
@@ -41,21 +26,21 @@ let outsideClickEnabled = true;
 
 function setMenuVisible(visible) {
   const display = visible ? 'flex' : 'none';
-  menuTop.style.display    = display;
-  menuBottom.style.display = display;
+  domRefs.menuTop.style.display = display;
+  domRefs.menuBottom.style.display = display;
 }
 
 function setToggleStyle(state) {
   if (state === 'open') {
-    menuToggle.style.border       = '';
-    menuToggle.style.borderStyle  = 'double';
+    domRefs.menuToggle.style.border = '';
+    domRefs.menuToggle.style.borderStyle  = 'double';
   } else if (state === 'locked') {
-    menuToggle.style.border       = '2px groove #e0dfdf';
-    menuToggle.textContent = '✕';
+    domRefs.menuToggle.style.border = '2px groove #e0dfdf';
+    domRefs.menuToggle.textContent = '✕';
   } else {
-    menuToggle.style.border       = '';
-    menuToggle.style.borderStyle = '';
-    menuToggle.textContent = '☰';
+    domRefs.menuToggle.style.border = '';
+    domRefs.menuToggle.style.borderStyle = '';
+    domRefs.menuToggle.textContent = '☰';
   }
 }
 
@@ -84,14 +69,14 @@ function togglePanel(panel, btn) {
 }
 
 function initMenuToggle() {
-  menuToggle.addEventListener('click', e => {
+  domRefs.menuToggle.addEventListener('click', e => {
     e.stopPropagation();
-    const isOpen = menuTop.style.display !== 'none';
+    const isOpen = domRefs.menuTop.style.display !== 'none';
 
     if (!isOpen) {
       setMenuVisible(true);
       setToggleStyle('open');
-      bringToFront(menuContainer);
+      bringToFront(domRefs.menuContainer);
       if (activePanel) {
         activePanel.style.display = 'block';
         activeBtn?.classList.add('active');
@@ -126,7 +111,7 @@ function initMenuToggle() {
 
 function initLayersPanel() {
   LAYER_ORDER.forEach(key => {
-    const cb = layersPanel.querySelector(`#layer_${key}`);
+    const cb = domRefs.layersPanel.querySelector(`#layer_${key}`);
     cb?.addEventListener('change', e => {
       setLayerVisibility(key, e.target.checked);
       reorderLayers();
@@ -134,7 +119,7 @@ function initLayersPanel() {
   });
 
   ['meridians', 'parallels', 'dateLine'].forEach(key => {
-    const cb = layersPanel.querySelector(`#layer_${key}`);
+    const cb = domRefs.layersPanel.querySelector(`#layer_${key}`);
     cb?.addEventListener('change', e => {
       const visibility = e.target.checked ? 'visible' : 'none';
       [`${key}-line`, `${key}-line-hitarea`].forEach(layerId => {
@@ -156,13 +141,13 @@ const nestedChildren = {
 const childRegions = new Set(Object.values(nestedChildren).flat());
 
 export function buildRegionControl() {
-  regionControl.innerHTML = '';
+  domRefs.regionControl.innerHTML = '';
 
   Object.entries(regionColors).forEach(([region, color]) => {
     if (childRegions.has(region)) return;
 
     const regionItem = createRegionItem(region, color);
-    regionControl.appendChild(regionItem);
+    domRefs.regionControl.appendChild(regionItem);
 
     if (nestedChildren[region]) {
       const childContainer = document.createElement('div');
@@ -176,7 +161,7 @@ export function buildRegionControl() {
       });
 
       childContainer.style.display = 'none';
-      regionControl.appendChild(childContainer);
+      domRefs.regionControl.appendChild(childContainer);
 
       const toggleBtn = document.createElement('button');
       toggleBtn.className = 'toggle-children-btn';
@@ -235,7 +220,7 @@ function createRegionItem(region, color) {
 }
 
 export function updateRegionControlTexts() {
-  regionControl.querySelectorAll('.region-item').forEach(item => {
+  domRefs.regionControl.querySelectorAll('.region-item').forEach(item => {
     const region = item.dataset.region;
     item.querySelector('span:not(.color-box)').textContent = getRegionDisplayName(region);
   });
@@ -290,33 +275,19 @@ function initLanguagePanel(onLanguageChange) {
 // 初期化（エントリーポイント）
 // ==================
 
-export function initMenuUI(_map, _mapContainer, domRefs, {
+export function initMenuUI(_map, _mapContainer, _domRefs, {
   onLanguageChange,
 }) {
-  map           = _map;
-  mapContainer  = _mapContainer;
-
-  menuContainer = domRefs.menuContainer;
-  menuToggle    = domRefs.menuToggle;
-  menuTop       = domRefs.menuTop;
-  menuBottom    = domRefs.menuBottom;
-  btnTheme      = domRefs.btnTheme;
-  themePanel    = domRefs.themePanel;
-  btnLanguage   = domRefs.btnLanguage;
-  languagePanel = domRefs.languagePanel;
-  btnMaps       = domRefs.btnMaps;
-  mapsPanel     = domRefs.mapsPanel;
-  btnLayers     = domRefs.btnLayers;
-  layersPanel   = domRefs.layersPanel;
-  btnRegions    = domRefs.btnRegions;
-  regionControl = domRefs.regionControl;
+  map          = _map;
+  mapContainer = _mapContainer;
+  domRefs      = _domRefs;
 
   menuItems = [
-    [btnTheme,    themePanel],
-    [btnLanguage, languagePanel],
-    [btnMaps,     mapsPanel],
-    [btnLayers,   layersPanel],
-    [btnRegions,  regionControl],
+    [domRefs.btnTheme,    domRefs.themePanel],
+    [domRefs.btnLanguage, domRefs.languagePanel],
+    [domRefs.btnMaps,     domRefs.mapsPanel],
+    [domRefs.btnLayers,   domRefs.layersPanel],
+    [domRefs.btnRegions,  domRefs.regionControl],
   ];
 
   initMenuToggle();
