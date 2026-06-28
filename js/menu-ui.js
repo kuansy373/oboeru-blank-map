@@ -176,7 +176,7 @@ function appendChildRegions(region, regionItem) {
     const isOpen = childContainer.style.display !== 'none';
     childContainer.style.display = isOpen ? 'none' : '';
     toggleBtn.textContent = isOpen ? '▸' : '▾';
-    toggleBtn.style.opacity = isOpen ? '0.6' : '0.8';
+    toggleBtn.style.opacity = isOpen ? '' : '0.65';
   });
 
   regionItem.querySelector('.reset-btn').insertAdjacentElement('afterend', toggleBtn);
