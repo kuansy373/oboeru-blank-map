@@ -116,10 +116,11 @@ function initLayersPanel() {
     const cb = domRefs.layersPanel.querySelector(`#layer_${key}`);
     if (!cb) return;
 
-    cb.addEventListener('change', e => {
+    cb.addEventListener('change', async e => {
       if (lazyKeys.has(key)) {
         if (e.target.checked) {
-          loadLayerOnDemand(key);
+          await loadLayerOnDemand(key);
+          updateProgress(getCurrentRegionQuery());
         } else {
           setLayerVisibility(key, false);
         }

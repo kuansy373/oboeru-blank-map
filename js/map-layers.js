@@ -151,6 +151,10 @@ export function bringLayerToFront(key) {
   LAYER_Z_INDEX[key] = maxZ + 1;
 }
 
+export function isLayerLoaded(key) {
+  return loadedLayers.has(key);
+}
+
 // ==================
 // GeoJSONフェッチ・レイヤー追加
 // ==================

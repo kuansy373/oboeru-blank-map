@@ -1,8 +1,8 @@
-import { GEOJSON_REGIONS, COPY_ICON } from './config.js';
+import { GEOJSON_REGIONS, REGION_TO_SOURCE, COPY_ICON } from './config.js';
 import { normalize, toKatakana, copyToClipboard, getRegion } from './utils.js';
 import { getDisplayName, getRegionDisplayName } from './lang.js';
 import { countryRegions, regionColors } from './regions.js';
-import { geojsonData, filledFeatures, findFeatureById, getSourcesForRegion, zoomToFeature } from './map-layers.js';
+import { geojsonData, filledFeatures, findFeatureById, getSourcesForRegion, zoomToFeature, isLayerLoaded } from './map-layers.js';
 import { buildActiveCommandsString } from './commands.js';
 
 let progressDisplay;
@@ -16,7 +16,11 @@ const expandedLists = {};
 export function getMatchedRegions(query) {
   const searchTerms = query.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
   if (searchTerms.length === 0) return [];
-  const allRegions = [...Object.keys(countryRegions), 'Default', 'Commands'];
+  const allRegions = [...Object.keys(countryRegions), 'Default', 'Commands']
+    .filter(region => {
+      const sourceKey = REGION_TO_SOURCE[region];
+      return !sourceKey || isLayerLoaded(sourceKey);
+    });
   return allRegions.filter(region => {
     const displayName = getRegionDisplayName(region);
     return searchTerms.some(term => {
