@@ -25,6 +25,12 @@ function isCoveredByUpperLayer(key, point) {
   return map.queryRenderedFeatures(point, { layers: upperLayers }).length > 0;
 }
 
+function getLoadedPolygonLayers() {
+  return getCurrentLayerOrder()
+    .flatMap(key => [`${key}-fill`, `${key}-line`])
+    .filter(id => map.getLayer(id));
+}
+
 // ==================
 // ポップアップ
 // ==================
@@ -190,14 +196,13 @@ function addHighlightLine(uniqueId, highlightFeature, lngLat) {
 }
 
 function registerLineClickEvents() {
-  const topLayers = LAYER_KEYS
-    .flatMap(k => [`${k}-fill`, `${k}-line`])
-    .filter(id => map.getLayer(id));
   ['meridians-line-hitarea', 'parallels-line-hitarea', 'dateLine-line-hitarea'].forEach(layerId => {
     const isDateLine = layerId === 'dateLine-line-hitarea';
 
     map.on('click', layerId, e => {
-      const topFeatures = map.queryRenderedFeatures(e.point, { layers: topLayers });
+      const topFeatures = map.queryRenderedFeatures(e.point, {
+        layers: getLoadedPolygonLayers()
+      });
       if (topFeatures.length > 0 || !e.features.length) return;
 
       if (isDateLine) {
@@ -216,7 +221,9 @@ function registerLineClickEvents() {
     });
 
     map.on('mousemove', layerId, e => {
-      const topFeatures = map.queryRenderedFeatures(e.point, { layers: topLayers });
+      const topFeatures = map.queryRenderedFeatures(e.point, {
+        layers: getLoadedPolygonLayers()
+      });
       map.getCanvas().style.cursor = topFeatures.length === 0 ? 'pointer' : '';
     });
 
