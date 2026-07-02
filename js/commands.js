@@ -1,13 +1,5 @@
 let map;
-let zoomControlsLeft;
-let zoomControlsRight;
-let zoomInLeft;
-let zoomInRight;
-let zoomOutLeft;
-let zoomOutRight;
-let aimOverlay;
-let locDisplay;
-let searchInput;
+let domRefs;
 
 // ==================
 // コマンド定義
@@ -36,18 +28,18 @@ export const commands = [
 
       if (token.endsWith(',')) yMode = false;
 
-      zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
-      zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
-      zoomControlsLeft.style.bottom     = `${yVal}%`;
-      zoomControlsRight.style.bottom    = `${yVal}%`;
-      zoomControlsLeft.style.transform  = 'translateY(50%)';
-      zoomControlsRight.style.transform = 'translateY(50%)';
+      domRefs.zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
+      domRefs.zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
+      domRefs.zoomControlsLeft.style.bottom     = `${yVal}%`;
+      domRefs.zoomControlsRight.style.bottom    = `${yVal}%`;
+      domRefs.zoomControlsLeft.style.transform  = 'translateY(50%)';
+      domRefs.zoomControlsRight.style.transform = 'translateY(50%)';
 
       setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
     },
     reset() {
-      zoomControlsLeft.style.display  = 'none';
-      zoomControlsRight.style.display = 'none';
+      domRefs.zoomControlsLeft.style.display  = 'none';
+      domRefs.zoomControlsRight.style.display = 'none';
       setZoomBtnText('+', '-');
     }
   },
@@ -69,16 +61,16 @@ export const commands = [
         const hMatch = part.match(/^h(\d+)$/);
         if (hMatch) { h = parseInt(hMatch[1]); return; }
         const oMatch = part.match(/^o(\d+)$/);
-        if (oMatch) { aimOverlay.style.opacity = parseInt(oMatch[1]) / 100; return; }
+        if (oMatch) { domRefs.aimOverlay.style.opacity = parseInt(oMatch[1]) / 100; return; }
       });
 
-      aimOverlay.style.display = 'block';
-      aimOverlay.style.width   = `${Math.min(w, window.innerWidth)}px`;
-      aimOverlay.style.height  = `${Math.min(h, window.innerHeight)}px`;
+      domRefs.aimOverlay.style.display = 'block';
+      domRefs.aimOverlay.style.width   = `${Math.min(w, window.innerWidth)}px`;
+      domRefs.aimOverlay.style.height  = `${Math.min(h, window.innerHeight)}px`;
     },
     reset() {
-      aimOverlay.style.display = 'none';
-      aimOverlay.style.opacity = '1';
+      domRefs.aimOverlay.style.display = 'none';
+      domRefs.aimOverlay.style.opacity = '1';
     }
   },
   {
@@ -92,11 +84,11 @@ export const commands = [
       const zoom   = map.getZoom().toFixed(digits);
       const lng    = center.lng.toFixed(digits);
       const lat    = center.lat.toFixed(digits);
-      locDisplay.textContent   = `center: [${lng}, ${lat}], zoom: ${zoom}`;
-      locDisplay.style.display = 'block';
+      domRefs.locDisplay.textContent   = `center: [${lng}, ${lat}], zoom: ${zoom}`;
+      domRefs.locDisplay.style.display = 'block';
     },
     reset() {
-      locDisplay.style.display = 'none';
+      domRefs.locDisplay.style.display = 'none';
     }
   },
 ];
@@ -106,10 +98,10 @@ export const commands = [
 // ==================
 
 function setZoomBtnText(inText, outText) {
-  zoomInLeft.textContent   = inText;
-  zoomInRight.textContent  = inText;
-  zoomOutLeft.textContent  = outText;
-  zoomOutRight.textContent = outText;
+  domRefs.zoomInLeft.textContent   = inText;
+  domRefs.zoomInRight.textContent  = inText;
+  domRefs.zoomOutLeft.textContent  = outText;
+  domRefs.zoomOutRight.textContent = outText;
 }
 
 // ==================
@@ -140,11 +132,11 @@ export function parseInput(raw) {
 }
 
 export function getCurrentRegionQuery() {
-  return parseInput(searchInput.value).regionQuery;
+  return parseInput(domRefs.searchInput.value).regionQuery;
 }
 
 export function applyCommands(updateProgress) {
-  const { matched, regionQuery } = parseInput(searchInput.value);
+  const { matched, regionQuery } = parseInput(domRefs.searchInput.value);
   commands.forEach(cmd => {
     if (matched[cmd.name]) cmd.apply(matched[cmd.name]);
     else cmd.reset();
@@ -157,7 +149,7 @@ export function applyCommands(updateProgress) {
 // ==================
 
 export function buildActiveCommandsString() {
-  const raw = searchInput.value;
+  const raw = domRefs.searchInput.value;
   return commands
     .map(cmd => {
       const m = raw.match(cmd.pattern);
@@ -175,25 +167,7 @@ export function buildActiveCommandsString() {
 // 初期化（エントリーポイント）
 // ==================
 
-export function initCommands(_map, {
-  searchInput:       _searchInput,
-  zoomControlsLeft:  _zoomControlsLeft,
-  zoomControlsRight: _zoomControlsRight,
-  zoomInLeft:        _zoomInLeft,
-  zoomInRight:       _zoomInRight,
-  zoomOutLeft:       _zoomOutLeft,
-  zoomOutRight:      _zoomOutRight,
-  aimOverlay:        _aimOverlay,
-  locDisplay:        _locDisplay,
-}) {
-  map               = _map;
-  searchInput       = _searchInput;
-  zoomControlsLeft  = _zoomControlsLeft;
-  zoomControlsRight = _zoomControlsRight;
-  zoomInLeft        = _zoomInLeft;
-  zoomInRight       = _zoomInRight;
-  zoomOutLeft       = _zoomOutLeft;
-  zoomOutRight      = _zoomOutRight;
-  aimOverlay        = _aimOverlay;
-  locDisplay        = _locDisplay;
+export function initCommands(_map, _domRefs) {
+  map = _map;
+  domRefs = _domRefs;
 }
