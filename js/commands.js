@@ -2,6 +2,14 @@ let map;
 let domRefs;
 
 // ==================
+// ユーティリティ
+// ==================
+
+function tokenToParts(token) {
+  return token.replace(/^;/, '').replace(/[,;]$/, '').split('.').filter(Boolean);
+}
+
+// ==================
 // コマンド定義
 // ==================
 
@@ -10,7 +18,7 @@ export const commands = [
     name: 'zm',
     pattern: /;zm(\.[lr])?(\.y-?\d*)?(\.[lr])?(\.y-?\d*)*[,;]?/,
     apply(token) {
-      const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
+      const parts = tokenToParts(token);
 
       let showLeft  = true;
       let showRight = true;
@@ -47,7 +55,7 @@ export const commands = [
     name: 'aim',
     pattern: /;aim(\.[whs]\d+|\.o\d+)*[,;]?/,
     apply(token) {
-      const parts = token.replace(/^;/, '').replace(/,$/, '').split('.').filter(Boolean);
+      const parts = tokenToParts(token);
 
       let w = 24;
       let h = 24;
@@ -77,7 +85,7 @@ export const commands = [
     name: 'loc',
     pattern: /;loc(\.\d+)?[,;]?/,
     apply(token) {
-      const parts  = token.replace(/^;/, '').replace(/[,;]$/, '').split('.').filter(Boolean);
+      const parts  = tokenToParts(token);
       const digits = parts[1] !== undefined ? parseInt(parts[1]) : 0;
 
       const center = map.getCenter();
