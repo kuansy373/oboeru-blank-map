@@ -9,6 +9,18 @@ function tokenToParts(token) {
   return token.replace(/^;/, '').replace(/[,;]$/, '').split('.').filter(Boolean);
 }
 
+function applySizeOpacityPart(part, state) {
+  const sMatch = part.match(/^s(\d+)$/);
+  if (sMatch) { state.w = parseInt(sMatch[1]); state.h = parseInt(sMatch[1]); return true; }
+  const wMatch = part.match(/^w(\d+)$/);
+  if (wMatch) { state.w = parseInt(wMatch[1]); return true; }
+  const hMatch = part.match(/^h(\d+)$/);
+  if (hMatch) { state.h = parseInt(hMatch[1]); return true; }
+  const oMatch = part.match(/^o(\d+)$/);
+  if (oMatch) { state.opacity = parseInt(oMatch[1]) / 100; return true; }
+  return false;
+}
+
 // ==================
 // コマンド定義
 // ==================
@@ -16,7 +28,7 @@ function tokenToParts(token) {
 export const commands = [
   {
     name: 'zm',
-    pattern: /;zm(\.[lr])?(\.y-?\d*)?(\.[lr])?(\.y-?\d*)*[,;]?/,
+    pattern: /;zm(\.[lr]|\.y-?\d*|\.[whs]\d+|\.o\d+)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
 
@@ -24,6 +36,7 @@ export const commands = [
       let showRight = true;
       let yVal      = 50;
       let yMode     = false;
+      const size    = { w: 44, h: 44, opacity: 1 };
 
       parts.forEach(part => {
         if (part === 'zm') return;
@@ -32,6 +45,7 @@ export const commands = [
         if (part === 'y') { yMode = true; return; }
         const yMatch = part.match(/^y(-?\d+)$/);
         if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
+        applySizeOpacityPart(part, size);
       });
 
       if (token.endsWith(',')) yMode = false;
@@ -42,12 +56,25 @@ export const commands = [
       domRefs.zoomControlsRight.style.bottom    = `${yVal}%`;
       domRefs.zoomControlsLeft.style.transform  = 'translateY(50%)';
       domRefs.zoomControlsRight.style.transform = 'translateY(50%)';
+      domRefs.zoomControlsLeft.style.opacity    = size.opacity;
+      domRefs.zoomControlsRight.style.opacity   = size.opacity;
+
+      [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
+        btn.style.width  = `${size.w}px`;
+        btn.style.height = `${size.h}px`;
+      });
 
       setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
     },
     reset() {
       domRefs.zoomControlsLeft.style.display  = 'none';
       domRefs.zoomControlsRight.style.display = 'none';
+      domRefs.zoomControlsLeft.style.opacity  = '1';
+      domRefs.zoomControlsRight.style.opacity = '1';
+      [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
+        btn.style.width  = '';
+        btn.style.height = '';
+      });
       setZoomBtnText('+', '-');
     }
   },
@@ -56,25 +83,17 @@ export const commands = [
     pattern: /;aim(\.[whs]\d+|\.o\d+)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
-
-      let w = 24;
-      let h = 24;
+      const size = { w: 24, h: 24, opacity: 1 };
 
       parts.forEach(part => {
         if (part === 'aim') return;
-        const sMatch = part.match(/^s(\d+)$/);
-        if (sMatch) { w = parseInt(sMatch[1]); h = parseInt(sMatch[1]); return; }
-        const wMatch = part.match(/^w(\d+)$/);
-        if (wMatch) { w = parseInt(wMatch[1]); return; }
-        const hMatch = part.match(/^h(\d+)$/);
-        if (hMatch) { h = parseInt(hMatch[1]); return; }
-        const oMatch = part.match(/^o(\d+)$/);
-        if (oMatch) { domRefs.aimOverlay.style.opacity = parseInt(oMatch[1]) / 100; return; }
+        applySizeOpacityPart(part, size);
       });
 
+      domRefs.aimOverlay.style.opacity = size.opacity;
       domRefs.aimOverlay.style.display = 'block';
-      domRefs.aimOverlay.style.width   = `${Math.min(w, window.innerWidth)}px`;
-      domRefs.aimOverlay.style.height  = `${Math.min(h, window.innerHeight)}px`;
+      domRefs.aimOverlay.style.width   = `${Math.min(size.w, window.innerWidth)}px`;
+      domRefs.aimOverlay.style.height  = `${Math.min(size.h, window.innerHeight)}px`;
     },
     reset() {
       domRefs.aimOverlay.style.display = 'none';
