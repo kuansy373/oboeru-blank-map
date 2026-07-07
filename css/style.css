@@ -71,13 +71,26 @@ body {
   color: #666;
 }
 
+
+
+
+
 .progress-display {
   font-size: 15px;
 }
 
+:root {
+  --country-unfilled-color: #aaa;
+  --country-hover-color: #000;
+}
 
+.region-progress {
+  cursor: default;
+}
 
-
+.region-progress.clickable {
+  cursor: pointer;
+}
 
 .region-progress-header {
   display: flex;
@@ -113,6 +126,22 @@ body {
   font-size: 13px;
   line-height: 1.6;
   scrollbar-width: thin;
+}
+
+.country-list.collapsed {
+  display: none;
+}
+
+.country-list [data-code] {
+  color: var(--country-unfilled-color);
+}
+
+.country-list [data-code].filled {
+  color: var(--region-color);
+}
+
+.country-list [data-code]:hover {
+  color: var(--country-hover-color);
 }
 
 

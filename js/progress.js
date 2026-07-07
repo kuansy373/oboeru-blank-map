@@ -9,6 +9,8 @@ let progressDisplay;
 
 const expandedLists = {};
 
+const COUNTRY_LIST_SELECTOR = '[id^="country-list-"]';
+
 // ==================
 // 地域マッチング
 // ==================
@@ -78,7 +80,7 @@ function buildCountryList(region) {
 // HTML構築
 // ==================
 
-function buildSectionWrapper(region, headerInnerHTML, bodyInnerHTML, headerExtraClass = '') {
+function buildSectionWrapper(region, headerInnerHTML, bodyInnerHTML, headerExtraClass = '', listStyle = '') {
   const listId = `country-list-${region.replace(/\s+/g, '-')}`;
   const isExpanded = expandedLists[region] || false;
 
@@ -87,7 +89,7 @@ function buildSectionWrapper(region, headerInnerHTML, bodyInnerHTML, headerExtra
       ${headerInnerHTML}
       <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
     </div>
-    <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
+    <div id="${listId}" class="country-list${isExpanded ? '' : ' collapsed'}"${listStyle ? ` style="${listStyle}"` : ''}>
       ${bodyInnerHTML}
     </div>
   `;
@@ -104,7 +106,7 @@ function buildCommandsSectionHTML() {
     : `<div class="command-active command-none">No active commands</div>`;
 
   const headerInner = `
-    <div class="region-progress" style="cursor:default;">
+    <div class="region-progress">
       <div class="region-progress-name commands-title">${getRegionDisplayName('Commands')}</div>
     </div>`;
 
@@ -124,16 +126,16 @@ function buildRegionSectionHTML(region) {
   const hasUnfilled = countryList.some(c => !c.filled);
 
   const headerInner = `
-    <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
+    <div class="region-progress${hasUnfilled ? ' clickable' : ''}" data-region="${region}">
       <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
       <div class="region-progress-count">${filledCount} / ${totalCount}</div>
     </div>`;
 
   const bodyInner = countryList
-    .map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`)
+    .map(c => `<div data-code="${c.code}" class="${c.filled ? 'filled' : ''}">${c.name}</div>`)
     .join('');
 
-  return buildSectionWrapper(region, headerInner, bodyInner);
+  return buildSectionWrapper(region, headerInner, bodyInner, '', `--region-color:${color};`);
 }
 
 function buildProgressHTML(matchedRegions) {
@@ -148,11 +150,15 @@ function buildProgressHTML(matchedRegions) {
 // 進捗更新
 // ==================
 
+function findCountryDiv(e) {
+  return e.target.closest(`${COUNTRY_LIST_SELECTOR} div`);
+}
+
 export function updateProgress(regionQuery) {
   if (!regionQuery) { progressDisplay.innerHTML = ''; return; }
 
   const scrollPositions = {};
-  progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
+  progressDisplay.querySelectorAll(COUNTRY_LIST_SELECTOR).forEach(list => {
     scrollPositions[list.id] = list.scrollTop;
   });
 
@@ -165,7 +171,7 @@ export function updateProgress(regionQuery) {
 
   progressDisplay.innerHTML = buildProgressHTML(matchedRegions);
 
-  progressDisplay.querySelectorAll('[id^="country-list-"]').forEach(list => {
+  progressDisplay.querySelectorAll(COUNTRY_LIST_SELECTOR).forEach(list => {
     if (scrollPositions[list.id] !== undefined) list.scrollTop = scrollPositions[list.id];
   });
 }
@@ -192,8 +198,8 @@ export function attachProgressEvents() {
     const toggleBtn = e.target.closest('.toggle-list-btn');
     if (toggleBtn) {
       const listEl = document.getElementById(toggleBtn.dataset.target);
-      const open = listEl.style.display === 'none';
-      listEl.style.display = open ? 'block' : 'none';
+      const open = listEl.classList.contains('collapsed');
+      listEl.classList.toggle('collapsed', !open);
       toggleBtn.textContent = open ? '▲' : '▼';
       expandedLists[toggleBtn.dataset.region] = open;
       return;
@@ -205,7 +211,7 @@ export function attachProgressEvents() {
       return;
     }
 
-    const countryDiv = e.target.closest('[id^="country-list-"] div');
+    const countryDiv = findCountryDiv(e);
     if (countryDiv) {
       if (!countryDiv.dataset.code) return;
       const countryCode = countryDiv.dataset.code;
@@ -213,21 +219,6 @@ export function attachProgressEvents() {
       if (feature) zoomToFeature(feature);
       else console.warn('国を特定できませんでした:', countryCode);
       return;
-    }
-  });
-
-  progressDisplay.addEventListener('mouseover', e => {
-    const countryDiv = e.target.closest('[id^="country-list-"] div');
-    if (countryDiv) {
-      countryDiv.dataset.origColor = countryDiv.style.color;
-      countryDiv.style.color = '#000';
-    }
-  });
-
-  progressDisplay.addEventListener('mouseout', e => {
-    const countryDiv = e.target.closest('[id^="country-list-"] div');
-    if (countryDiv && countryDiv.dataset.origColor) {
-      countryDiv.style.color = countryDiv.dataset.origColor;
     }
   });
 }
