@@ -78,6 +78,21 @@ function buildCountryList(region) {
 // HTML構築
 // ==================
 
+function buildSectionWrapper(region, headerInnerHTML, bodyInnerHTML, headerExtraClass = '') {
+  const listId = `country-list-${region.replace(/\s+/g, '-')}`;
+  const isExpanded = expandedLists[region] || false;
+
+  return `
+    <div class="region-progress-header${headerExtraClass ? ' ' + headerExtraClass : ''}">
+      ${headerInnerHTML}
+      <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
+    </div>
+    <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
+      ${bodyInnerHTML}
+    </div>
+  `;
+}
+
 function buildCommandsSectionHTML() {
   const activeCommands = buildActiveCommandsString();
 
@@ -88,21 +103,17 @@ function buildCommandsSectionHTML() {
       </div>`
     : `<div class="command-active command-none">No active commands</div>`;
 
-  const listId = 'country-list-Commands';
-  const isExpanded = expandedLists['Commands'] || false;
+  const headerInner = `
+    <div class="region-progress" style="cursor:default;">
+      <div class="region-progress-name commands-title">${getRegionDisplayName('Commands')}</div>
+    </div>`;
 
-  return `
-    <div class="region-progress-header commands-header">
-      <div class="region-progress" style="cursor:default;">
-        <div class="region-progress-name commands-title">${getRegionDisplayName('Commands')}</div>
-      </div>
-      <button class="toggle-list-btn" data-target="${listId}" data-region="Commands">${isExpanded ? '▲' : '▼'}</button>
-    </div>
-    <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
-      ${activeCommandsHTML}
-      <div><a href="https://github.com/kuansy373/oboeru-blank-map#readme" target="_blank">${getDisplayName('README')}</a></div>
-    </div>
+  const bodyInner = `
+    ${activeCommandsHTML}
+    <div><a href="https://github.com/kuansy373/oboeru-blank-map#readme" target="_blank">${getDisplayName('README')}</a></div>
   `;
+
+  return buildSectionWrapper('Commands', headerInner, bodyInner, 'commands-header');
 }
 
 function buildRegionSectionHTML(region) {
@@ -110,22 +121,19 @@ function buildRegionSectionHTML(region) {
   const filledCount = countryList.filter(c => c.filled).length;
   const totalCount  = countryList.length;
   const color       = regionColors[region] || regionColors.Default;
-  const listId      = `country-list-${region.replace(/\s+/g, '-')}`;
-  const isExpanded  = expandedLists[region] || false;
   const hasUnfilled = countryList.some(c => !c.filled);
 
-  return `
-    <div class="region-progress-header">
-      <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
-        <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
-        <div class="region-progress-count">${filledCount} / ${totalCount}</div>
-      </div>
-      <button class="toggle-list-btn" data-target="${listId}" data-region="${region}">${isExpanded ? '▲' : '▼'}</button>
-    </div>
-    <div id="${listId}" class="country-list" style="display:${isExpanded ? 'block' : 'none'};">
-      ${countryList.map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`).join('')}
-    </div>
-  `;
+  const headerInner = `
+    <div class="region-progress" data-region="${region}" style="cursor:${hasUnfilled ? 'pointer' : 'default'};">
+      <div class="region-progress-name" style="color:${color};">${getRegionDisplayName(region)}</div>
+      <div class="region-progress-count">${filledCount} / ${totalCount}</div>
+    </div>`;
+
+  const bodyInner = countryList
+    .map(c => `<div data-code="${c.code}" style="color:${c.filled ? color : '#aaa'};">${c.name}</div>`)
+    .join('');
+
+  return buildSectionWrapper(region, headerInner, bodyInner);
 }
 
 function buildProgressHTML(matchedRegions) {
