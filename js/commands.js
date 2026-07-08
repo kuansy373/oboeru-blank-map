@@ -1,5 +1,6 @@
 let map;
 let domRefs;
+let zmYMode = false;
 
 // ==================
 // ユーティリティ
@@ -54,32 +55,34 @@ export const commands = [
 
       if (token.endsWith(',')) yMode = false;
 
+      zmYMode = yMode;
+
       domRefs.zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
       domRefs.zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
       domRefs.zoomControlsLeft.style.bottom     = `${yVal}%`;
       domRefs.zoomControlsRight.style.bottom    = `${yVal}%`;
-      domRefs.zoomControlsLeft.style.transform  = 'translateY(50%)';
-      domRefs.zoomControlsRight.style.transform = 'translateY(50%)';
       domRefs.zoomControlsLeft.style.opacity    = size.opacity;
       domRefs.zoomControlsRight.style.opacity   = size.opacity;
+      domRefs.zoomControlsLeft.classList.toggle('zm-y-active', yMode);
+      domRefs.zoomControlsRight.classList.toggle('zm-y-active', yMode);
 
       [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
         btn.style.width  = `${size.w}px`;
         btn.style.height = `${size.h}px`;
       });
-
-      setZoomBtnText(yMode ? '↑' : '+', yMode ? '↓' : '-');
     },
     reset() {
       domRefs.zoomControlsLeft.style.display  = 'none';
       domRefs.zoomControlsRight.style.display = 'none';
-      domRefs.zoomControlsLeft.style.opacity  = '1';
-      domRefs.zoomControlsRight.style.opacity = '1';
+      domRefs.zoomControlsLeft.style.opacity  = '';
+      domRefs.zoomControlsRight.style.opacity = '';
+      domRefs.zoomControlsLeft.classList.remove('zm-y-active');
+      domRefs.zoomControlsRight.classList.remove('zm-y-active');
+      zmYMode = false;
       [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
         btn.style.width  = '';
         btn.style.height = '';
       });
-      setZoomBtnText('+', '-');
     }
   },
   {
@@ -101,7 +104,7 @@ export const commands = [
     },
     reset() {
       domRefs.aimOverlay.style.display = 'none';
-      domRefs.aimOverlay.style.opacity = '1';
+      domRefs.aimOverlay.style.opacity = '';
     }
   },
   {
@@ -134,17 +137,6 @@ export const commands = [
     },
   },
 ];
-
-// ==================
-// ズームボタンテキスト
-// ==================
-
-function setZoomBtnText(inText, outText) {
-  domRefs.zoomInLeft.textContent   = inText;
-  domRefs.zoomInRight.textContent  = inText;
-  domRefs.zoomOutLeft.textContent  = outText;
-  domRefs.zoomOutRight.textContent = outText;
-}
 
 // ==================
 // 入力パース
@@ -203,6 +195,27 @@ export function buildActiveCommandsString() {
     .map(({ token }) => token)
     .join('')
     .replace(/;;+/g, ';');
+}
+
+// ==================
+// yドラッグモード: 外部からの状態参照・値更新
+// ==================
+
+export function isZoomYMode() {
+  return zmYMode;
+}
+
+export function updateZoomYValue(newVal) {
+  const raw   = domRefs.searchInput.value;
+  const match = raw.match(/\.y-?\d*(\.\d+)?/);
+  if (!match) return raw;
+
+  const clamped = Math.max(0, Math.min(100, newVal));
+  const rounded = Math.round(clamped * 10) / 10;
+
+  const updated = raw.replace(/\.y-?\d*(\.\d+)?/, `.y${rounded}`);
+  domRefs.searchInput.value = updated;
+  return updated;
 }
 
 // ==================
