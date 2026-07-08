@@ -6,18 +6,22 @@ let domRefs;
 // ==================
 
 function tokenToParts(token) {
-  return token.replace(/^;/, '').replace(/[,;]$/, '').split('.').filter(Boolean);
+  return token
+    .replace(/^;/, '')
+    .replace(/[,;]$/, '')
+    .split(/\.(?=[a-z])/)
+    .filter(Boolean);
 }
 
 function applySizeOpacityPart(part, state) {
-  const sMatch = part.match(/^s(\d+)$/);
-  if (sMatch) { state.w = parseInt(sMatch[1]); state.h = parseInt(sMatch[1]); return true; }
-  const wMatch = part.match(/^w(\d+)$/);
-  if (wMatch) { state.w = parseInt(wMatch[1]); return true; }
-  const hMatch = part.match(/^h(\d+)$/);
-  if (hMatch) { state.h = parseInt(hMatch[1]); return true; }
-  const oMatch = part.match(/^o(\d+)$/);
-  if (oMatch) { state.opacity = parseInt(oMatch[1]) / 100; return true; }
+  const sMatch = part.match(/^s(\d+(?:\.\d+)?)$/);
+  if (sMatch) { state.w = parseFloat(sMatch[1]); state.h = parseFloat(sMatch[1]); return true; }
+  const wMatch = part.match(/^w(\d+(?:\.\d+)?)$/);
+  if (wMatch) { state.w = parseFloat(wMatch[1]); return true; }
+  const hMatch = part.match(/^h(\d+(?:\.\d+)?)$/);
+  if (hMatch) { state.h = parseFloat(hMatch[1]); return true; }
+  const oMatch = part.match(/^o(\d+(?:\.\d+)?)$/);
+  if (oMatch) { state.opacity = parseFloat(oMatch[1]) / 100; return true; }
   return false;
 }
 
@@ -28,7 +32,7 @@ function applySizeOpacityPart(part, state) {
 export const commands = [
   {
     name: 'zm',
-    pattern: /;zm(\.[lr]|\.y-?\d*|\.[whs]\d+|\.o\d+)*[,;]?/,
+    pattern: /;zm(\.[lr]|\.y-?\d*(\.\d+)?|\.[whso]\d+(\.\d+)?)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
 
@@ -43,7 +47,7 @@ export const commands = [
         if (part === 'r') { showLeft  = false; return; }
         if (part === 'l') { showRight = false; return; }
         if (part === 'y') { yMode = true; return; }
-        const yMatch = part.match(/^y(-?\d+)$/);
+        const yMatch = part.match(/^y(-?\d+(?:\.\d+)?)$/);
         if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
         applySizeOpacityPart(part, size);
       });
@@ -80,7 +84,7 @@ export const commands = [
   },
   {
     name: 'aim',
-    pattern: /;aim(\.[whs]\d+|\.o\d+)*[,;]?/,
+    pattern: /;aim(\.[whso]\d+(\.\d+)?)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
       const size = { w: 24, h: 24, opacity: 1 };
@@ -102,10 +106,19 @@ export const commands = [
   },
   {
     name: 'loc',
-    pattern: /;loc(\.\d+)?[,;]?/,
+    pattern: /;loc(\.s\d+(\.\d+)?|\.d\d+)*[,;]?/,
     apply(token) {
-      const parts  = tokenToParts(token);
-      const digits = parts[1] !== undefined ? parseInt(parts[1]) : 0;
+      const parts = tokenToParts(token);
+      let digits = 0;
+      let fontSize = null;
+
+      parts.forEach(part => {
+        if (part === 'loc') return;
+        const sMatch = part.match(/^s(\d+(?:\.\d+)?)$/);
+        if (sMatch) { fontSize = parseFloat(sMatch[1]); return; }
+        const dMatch = part.match(/^d(\d+)$/);
+        if (dMatch) { digits = parseInt(dMatch[1]); return; }
+      });
 
       const center = map.getCenter();
       const zoom   = map.getZoom().toFixed(digits);
@@ -113,10 +126,12 @@ export const commands = [
       const lat    = center.lat.toFixed(digits);
       domRefs.locDisplay.textContent   = `center: [${lng}, ${lat}], zoom: ${zoom}`;
       domRefs.locDisplay.style.display = 'block';
+      domRefs.locDisplay.style.fontSize = fontSize !== null ? `${fontSize}px` : '';
     },
     reset() {
-      domRefs.locDisplay.style.display = 'none';
-    }
+      domRefs.locDisplay.style.display  = 'none';
+      domRefs.locDisplay.style.fontSize = '';
+    },
   },
 ];
 
