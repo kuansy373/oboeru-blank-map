@@ -2,6 +2,15 @@ import { SOURCE_KEY_TO_REGION, COPY_ICON } from './config.js';
 import { countryRegions } from './regions.js';
 
 // ==================
+// 要素のzindexを更新
+// ==================
+
+let topZIndex = 10;
+export function bringToFront(element) {
+  element.style.zIndex = ++topZIndex;
+}
+
+// ==================
 // 文字列ユーティリティ
 // ==================
 

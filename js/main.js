@@ -3,7 +3,8 @@ import { initCommands, commands, parseInput, getCurrentRegionQuery, applyCommand
 import { initMapLayers } from './map-layers.js';
 import { initMapEvents, registerClickEvents, refreshOpenPopups } from './map-events.js';
 import { initProgress, updateProgress, attachProgressEvents } from './progress.js';
-import { initMenuUI, updateRegionControlTexts, bringToFront } from './menu-ui.js';
+import { initMenuUI, updateRegionControlTexts } from './menu-ui.js';
+import { initSearchToggle } from './ui-toggles.js';
 
 document.addEventListener('DOMContentLoaded', () => {
 
@@ -100,21 +101,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   initMapLayers(map, mapContainer, layersPanel, registerClickEvents);
 
-
-  // ==================
-  // 検索トグル
-  // ==================
-
-  searchToggle.addEventListener('click', e => {
-    e.stopPropagation();
-    const isOpen = getComputedStyle(searchContainer).display !== 'none';
-    searchContainer.style.display = isOpen ? 'none' : 'block';
-    bringToFront(searchContainer);
-  });
-
-  closeButton.addEventListener('click', () => {
-    searchContainer.style.display = 'none';
-  });
+  initSearchToggle({ searchToggle, searchContainer, closeButton });
 
   // ==================
   // searchInput・マップイベント

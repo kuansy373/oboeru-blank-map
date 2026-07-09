@@ -4,103 +4,11 @@ import { regionColors, regionView, geoPaths } from './regions.js';
 import { fillFeature, clearFeature, applyToRegionFeatures, setLayerVisibility, reorderLayers, bringLayerToFront, updateGridInterval, loadLayerOnDemand, setLineLayerVisibility } from './map-layers.js';
 import { updateProgress } from './progress.js';
 import { getCurrentRegionQuery } from './commands.js';
+import { initMenuToggle } from './ui-toggles.js';
 
 let map;
 let mapContainer;
 let domRefs;
-
-// ==================
-// メニュー開閉
-// ==================
-
-let topZIndex = 10;
-function bringToFront(element) {
-  element.style.zIndex = ++topZIndex;
-}
-
-let activePanel = null;
-let activeBtn   = null;
-let menuItems;
-
-let outsideClickEnabled = true;
-
-function setMenuVisible(visible) {
-  const display = visible ? 'flex' : 'none';
-  domRefs.menuTop.style.display = display;
-  domRefs.menuBottom.style.display = display;
-}
-
-function setToggleStyle(state) {
-  const btn = domRefs.menuToggle;
-  btn.classList.remove('open', 'locked');
-  if (state === 'open') {
-    btn.classList.add('open');
-  } else if (state === 'locked') {
-    btn.classList.add('locked');
-  }
-  btn.textContent = state === 'locked' ? '✕' : '☰';
-}
-
-function hideActivePanelDisplay() {
-  menuItems.forEach(([btn, panel]) => {
-    panel.style.display = 'none';
-    btn.classList.remove('active');
-  });
-}
-
-function hidePanels() {
-  hideActivePanelDisplay();
-  activePanel = null;
-  activeBtn   = null;
-}
-
-function togglePanel(panel, btn) {
-  const isOpen = panel.style.display !== 'none';
-  hidePanels();
-  if (!isOpen) {
-    panel.style.display = 'block';
-    btn.classList.add('active');
-    activePanel = panel;
-    activeBtn   = btn;
-  }
-}
-
-function initMenuToggle() {
-  domRefs.menuToggle.addEventListener('click', e => {
-    e.stopPropagation();
-    const isOpen = domRefs.menuTop.style.display !== 'none';
-
-    if (!isOpen) {
-      setMenuVisible(true);
-      setToggleStyle('open');
-      bringToFront(domRefs.menuContainer);
-      if (activePanel) {
-        activePanel.style.display = 'block';
-        activeBtn?.classList.add('active');
-      }
-    } else if (outsideClickEnabled) {
-      outsideClickEnabled = false;
-      setToggleStyle('locked');
-    } else {
-      outsideClickEnabled = true;
-      setMenuVisible(false);
-      setToggleStyle('');
-      hideActivePanelDisplay();
-    }
-  });
-
-  document.addEventListener('click', () => {
-    if (!outsideClickEnabled) return;
-    setMenuVisible(false);
-    setToggleStyle('');
-    hideActivePanelDisplay();
-  });
-
-  menuItems.forEach(([btn, panel]) => {
-    btn.addEventListener('click', e => { e.stopPropagation(); togglePanel(panel, btn); });
-    panel.addEventListener('click', e => e.stopPropagation());
-  });
-}
 
 // ==================
 // レイヤーコントロール UI
@@ -347,20 +255,17 @@ export function initMenuUI(_map, _mapContainer, _domRefs, {
   mapContainer = _mapContainer;
   domRefs      = _domRefs;
 
-  menuItems = [
+  const menuItems = [
     [domRefs.btnTheme,    domRefs.themePanel],
     [domRefs.btnLanguage, domRefs.languagePanel],
     [domRefs.btnMaps,     domRefs.mapsPanel],
     [domRefs.btnLayers,   domRefs.layersPanel],
     [domRefs.btnRegions,  domRefs.regionControl],
   ];
-
-  initMenuToggle();
+  initMenuToggle(domRefs, menuItems);
   initLayersPanel();
   initThemePanel();
   initProjectionPanel();
   initLanguagePanel(onLanguageChange);
   buildRegionControl();
 }
-
-export { bringToFront };
