@@ -1,5 +1,5 @@
 import { setLang, updateButtonTexts } from './lang.js';
-import { initCommands, commands, parseInput, getCurrentRegionQuery, applyCommands, isZoomYMode, updateZoomYValue} from './commands.js';
+import { initCommands, commands, parseInput, getCurrentRegionQuery, applyCommands, isZoomYMode, updateZoomYValue, isZoomXMode, updateZoomXValue } from './commands.js';
 import { initMapLayers } from './map-layers.js';
 import { initMapEvents, registerClickEvents, refreshOpenPopups } from './map-events.js';
 import { initProgress, updateProgress, attachProgressEvents } from './progress.js';
@@ -137,18 +137,25 @@ document.addEventListener('DOMContentLoaded', () => {
   // ズームコントロール
   // ==================
 
-  // ズームボタンのドラッグ（yモード時の位置調整）
-  function setupZoomDrag(container) {
+  // ズームボタンのドラッグ（x/yモード時の位置調整）
+  function setupZoomDrag(container, side) {
     let dragging = false;
-    let startX, startY;
-    let moved = false;
+    let startPointerX = 0; // 掴んだ瞬間の指のX座標
+    let startPointerY = 0; // 掴んだ瞬間の指のY座標
+    let startValX = 0;     // 掴んだ瞬間のボタンのx%
+    let startValY = 0;     // 掴んだ瞬間のボタンのy%
 
     container.addEventListener('pointerdown', (e) => {
-      if (!isZoomYMode()) return;
+      if (!isZoomXMode() && !isZoomYMode()) return;
       dragging = true;
-      moved = false;
-      startX = e.clientX;
-      startY = e.clientY;
+
+      startPointerX = e.clientX;
+      startPointerY = e.clientY;
+
+      // 現在のcssの値（%）をそのまま読み取って記録する
+      startValX = parseFloat(container.style.left || container.style.right) || 0;
+      startValY = parseFloat(container.style.bottom) || 0;
+
       container.setPointerCapture(e.pointerId);
       e.preventDefault();
     });
@@ -157,15 +164,23 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!dragging) return;
       e.preventDefault();
 
-      if (Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3) {
-        moved = true;
+      if (isZoomYMode()) {
+        const vh = window.innerHeight;
+        const deltaY = startPointerY - e.clientY; // 上に動かすほどプラス
+        const deltaPercentY = (deltaY / vh) * 100;
+        updateZoomYValue(startValY + deltaPercentY);
       }
 
-      const vh = window.innerHeight;
-      const distFromBottom = vh - e.clientY;
-      const percent = (distFromBottom / vh) * 100;
+      if (isZoomXMode()) {
+        const vw = window.innerWidth;
+        const deltaX = e.clientX - startPointerX; // 右に動かすほどプラス
+        const deltaPercentX = (deltaX / vw) * 100;
 
-      updateZoomYValue(percent);
+        // leftは右に動くほど値が増える、rightは右に動くほど値が減る
+        const signedDelta = side === 'left' ? deltaPercentX : -deltaPercentX;
+        updateZoomXValue(startValX + signedDelta);
+      }
+
       applyCommands(updateProgress);
     });
 
@@ -178,17 +193,17 @@ document.addEventListener('DOMContentLoaded', () => {
     container.addEventListener('pointerup', endDrag);
     container.addEventListener('pointercancel', endDrag);
 
-    // yモード中は、ボタンのclick（ズーム操作）を抑制する
+    // ドラッグモード中は、ボタンのclick（ズーム操作）を抑制する
     container.addEventListener('click', (e) => {
-      if (isZoomYMode()) {
+      if (isZoomXMode() || isZoomYMode()) {
         e.stopPropagation();
         e.preventDefault();
       }
-    }, true); // capture: trueでボタン自身のclickリスナーより先に止める
+    }, true);
   }
 
-  setupZoomDrag(zoomControlsLeft);
-  setupZoomDrag(zoomControlsRight);
+  setupZoomDrag(zoomControlsLeft, 'left');
+  setupZoomDrag(zoomControlsRight, 'right');
 
   // ズーム
   function zoomAt(delta) {

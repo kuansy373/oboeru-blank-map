@@ -1,6 +1,7 @@
 let map;
 let domRefs;
 let zmYMode = false;
+let zmXMode = false;
 
 // ==================
 // ユーティリティ
@@ -33,7 +34,7 @@ function applySizeOpacityPart(part, state) {
 export const commands = [
   {
     name: 'zm',
-    pattern: /;zm(\.[lr]|\.y-?\d*(\.\d+)?|\.[whso]\d+(\.\d+)?)*[,;]?/,
+    pattern: /;zm(\.[lr]|\.y-?\d*(\.\d+)?|\.x-?\d*(\.\d+)?|\.[whso]\d+(\.\d+)?)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
 
@@ -41,6 +42,8 @@ export const commands = [
       let showRight = true;
       let yVal      = 50;
       let yMode     = false;
+      let xVal      = 0;
+      let xMode     = false;
       const size    = { w: 44, h: 44, opacity: 1 };
 
       parts.forEach(part => {
@@ -50,21 +53,27 @@ export const commands = [
         if (part === 'y') { yMode = true; return; }
         const yMatch = part.match(/^y(-?\d+(?:\.\d+)?)$/);
         if (yMatch) { yVal = Math.max(0, Math.min(100, parseFloat(yMatch[1]))); yMode = true; return; }
+        if (part === 'x') { xMode = true; return; }
+        const xMatch = part.match(/^x(-?\d+(?:\.\d+)?)$/);
+        if (xMatch) { xVal = Math.max(0, Math.min(100, parseFloat(xMatch[1]))); xMode = true; return; }
         applySizeOpacityPart(part, size);
       });
 
-      if (token.endsWith(',')) yMode = false;
+      if (token.endsWith(',')) { yMode = false; xMode = false; }
 
       zmYMode = yMode;
+      zmXMode = xMode;
 
       domRefs.zoomControlsLeft.style.display    = showLeft  ? 'flex' : 'none';
       domRefs.zoomControlsRight.style.display   = showRight ? 'flex' : 'none';
       domRefs.zoomControlsLeft.style.bottom     = `${yVal}%`;
       domRefs.zoomControlsRight.style.bottom    = `${yVal}%`;
+      domRefs.zoomControlsLeft.style.left       = `${xVal}%`;
+      domRefs.zoomControlsRight.style.right     = `${xVal}%`;
       domRefs.zoomControlsLeft.style.opacity    = size.opacity;
       domRefs.zoomControlsRight.style.opacity   = size.opacity;
-      domRefs.zoomControlsLeft.classList.toggle('zm-y-active', yMode);
-      domRefs.zoomControlsRight.classList.toggle('zm-y-active', yMode);
+      domRefs.zoomControlsLeft.classList.toggle('zm-drag-active', yMode || xMode);
+      domRefs.zoomControlsRight.classList.toggle('zm-drag-active', yMode || xMode);
 
       [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
         btn.style.width  = `${size.w}px`;
@@ -76,9 +85,12 @@ export const commands = [
       domRefs.zoomControlsRight.style.display = 'none';
       domRefs.zoomControlsLeft.style.opacity  = '';
       domRefs.zoomControlsRight.style.opacity = '';
-      domRefs.zoomControlsLeft.classList.remove('zm-y-active');
-      domRefs.zoomControlsRight.classList.remove('zm-y-active');
+      domRefs.zoomControlsLeft.style.left     = '';
+      domRefs.zoomControlsRight.style.right   = '';
+      domRefs.zoomControlsLeft.classList.remove('zm-drag-active');
+      domRefs.zoomControlsRight.classList.remove('zm-drag-active');
       zmYMode = false;
+      zmXMode = false;
       [domRefs.zoomInLeft, domRefs.zoomInRight, domRefs.zoomOutLeft, domRefs.zoomOutRight].forEach(btn => {
         btn.style.width  = '';
         btn.style.height = '';
@@ -198,24 +210,37 @@ export function buildActiveCommandsString() {
 }
 
 // ==================
-// yドラッグモード: 外部からの状態参照・値更新
+// ドラッグモード: 外部からの状態参照・値更新
 // ==================
 
 export function isZoomYMode() {
   return zmYMode;
 }
 
-export function updateZoomYValue(newVal) {
+export function isZoomXMode() {
+  return zmXMode;
+}
+
+function updateZoomAxisValue(axis, newVal) {
   const raw   = domRefs.searchInput.value;
-  const match = raw.match(/\.y-?\d*(\.\d+)?/);
+  const regex = new RegExp(`\\.${axis}-?\\d*(\\.\\d+)?`);
+  const match = raw.match(regex);
   if (!match) return raw;
 
   const clamped = Math.max(0, Math.min(100, newVal));
   const rounded = Math.round(clamped * 10) / 10;
 
-  const updated = raw.replace(/\.y-?\d*(\.\d+)?/, `.y${rounded}`);
+  const updated = raw.replace(regex, `.${axis}${rounded}`);
   domRefs.searchInput.value = updated;
   return updated;
+}
+
+export function updateZoomYValue(newVal) {
+  return updateZoomAxisValue('y', newVal);
+}
+
+export function updateZoomXValue(newVal) {
+  return updateZoomAxisValue('x', newVal);
 }
 
 // ==================

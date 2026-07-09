@@ -375,9 +375,9 @@ body {
   z-index: 9;
 }
 
-.zoom-controls.zm-y-active {
+.zoom-controls.zm-drag-active {
   touch-action: none;
-  border: 2px dashed #000;
+  outline: 2px dashed #000;
 }
 
 .zoom-left  { left: 0;  display: none; }
