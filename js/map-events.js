@@ -9,7 +9,6 @@ import { geojsonData, filledFeatures, fillFeature, clearFeature, getCurrentLayer
 let map;
 let _updateProgress;
 let _getCurrentRegionQuery;
-const openCountryPopups = new Map();
 
 // ==================
 // ユーティリティ
@@ -42,32 +41,80 @@ function buildPopup(lngLat, html) {
     .addTo(map);
 }
 
-function createResetPopup(key, id, name, region, lngLat) {
-  if (openCountryPopups.has(id)) {
-    openCountryPopups.get(id).popup.setLngLat(lngLat);
-    return;
-  }
+function createPopupManager() {
+  const popups = new Map();
 
-  const popup = buildPopup(lngLat, buildCountryPopupHTML(name, region, id));
-  openCountryPopups.set(id, { popup, key, name, region });
-  popup.on('close', () => openCountryPopups.delete(id));
+  return {
+    has: id => popups.has(id),
+    get: id => popups.get(id),
+
+    open(id, lngLat, html, meta = {}) {
+      if (popups.has(id)) {
+        popups.get(id).popup.setLngLat(lngLat);
+        return;
+      }
+      const popup = buildPopup(lngLat, html);
+      popups.set(id, { popup, ...meta });
+      popup.on('close', () => popups.delete(id));
+    },
+
+    remove(id) {
+      popups.get(id)?.popup.remove();
+      popups.delete(id);
+    },
+
+    closeAllExcept(excludeId = null) {
+      for (const [id, { popup }] of popups) {
+        if (id !== excludeId) popup.remove();
+      }
+    },
+
+    refreshHtml(htmlBuilder) {
+      for (const [id, entry] of popups) {
+        entry.popup.setHTML(htmlBuilder(id, entry));
+      }
+    },
+  };
 }
 
-function buildCountryPopupHTML(name, region, id) {
+const countryPopups = createPopupManager();
+const linePopups = createPopupManager();
+
+function buildPopupTemplate({ name, extra = '', resetAttr }) {
   return `
     <div class="popup-content">
-      <div class="popup-name">${getDisplayName(name)}</div>
+      <div class="popup-name">${name}</div>
       <div class="popup-region">
-        <span>${getRegionDisplayName(region)}</span>
-        <button class="popup-reset-btn" data-feature-id="${id}"></button>
+        ${extra}
+        <button class="popup-reset-btn" ${resetAttr}></button>
       </div>
     </div>
   `;
 }
 
+function buildCountryPopupHTML(name, region, id) {
+  return buildPopupTemplate({
+    name: getDisplayName(name),
+    extra: `<span>${getRegionDisplayName(region)}</span>`,
+    resetAttr: `data-feature-id="${id}"`,
+  });
+}
+
+function buildLinePopupHTML(uniqueId) {
+  return buildPopupTemplate({
+    name: buildLineLabel(uniqueId),
+    resetAttr: `data-line-id="${uniqueId}"`,
+  });
+}
+
 // ==================
-// クリックイベント
+// クリックイベント（国・地域）
 // ==================
+
+function closeAllPopups(excludeCountryId = null) {
+  countryPopups.closeAllExcept(excludeCountryId);
+  linePopups.closeAllExcept();
+}
 
 function parseProperties(props) {
   const result = { ...props };
@@ -79,7 +126,7 @@ function parseProperties(props) {
 
 function toggleFeatureFill(key, e) {
   const feature   = e.features[0];
-  const props = parseProperties(feature.properties);
+  const props     = parseProperties(feature.properties);
   const featureId = getFeatureId(feature);
   const name      = props.names || 'Unknown';
   const region    = getRegion(props, key);
@@ -89,15 +136,7 @@ function toggleFeatureFill(key, e) {
     fillFeature(key, featureId, fillColor);
     _updateProgress(_getCurrentRegionQuery());
   } else {
-    createResetPopup(key, featureId, name, region, e.lngLat);
-  }
-}
-
-function closeAllPopupsExcept(excludeId = null) {
-  for (const [id, { popup }] of openCountryPopups) {
-    if (id !== excludeId) {
-      popup.remove();
-    }
+    countryPopups.open(featureId, e.lngLat, buildCountryPopupHTML(name, region, featureId), { key, name, region });
   }
 }
 
@@ -106,7 +145,7 @@ function registerCountryClickEvents() {
     map.on('click', `${key}-fill`, e => {
       if (isCoveredByUpperLayer(key, e.point)) return;
       const featureId = getFeatureId(e.features[0]);
-      closeAllPopupsExcept(featureId);
+      closeAllPopups(featureId);
       toggleFeatureFill(key, e);
     });
 
@@ -116,11 +155,11 @@ function registerCountryClickEvents() {
 
   map.on('click', e => {
     const fillLayers = LAYER_KEYS
-        .map(k => `${k}-fill`)
-        .filter(id => map.getLayer(id));
+      .map(k => `${k}-fill`)
+      .filter(id => map.getLayer(id));
     const features = map.queryRenderedFeatures(e.point, { layers: fillLayers });
     if (features.length === 0) {
-      closeAllPopupsExcept();
+      closeAllPopups();
     }
   });
 }
@@ -131,7 +170,6 @@ function registerCountryClickEvents() {
 
 // Map: key=uniqueId, value={ layerId, sourceId }
 const highlightedLines = new Map();
-const highlightedLinePopups = new Map();
 
 function buildLineLabel(uniqueId) {
   if (uniqueId === 'date_line') return getDisplayName('International Date Line');
@@ -145,7 +183,7 @@ function getLineInfo(layerId, feature) {
   if (layerId === 'dateLine-line-hitarea') {
     return {
       uniqueId: 'date_line',
-      highlightFeature: geojsonData.dateLine.features[0]
+      highlightFeature: geojsonData.dateLine.features[0],
     };
   }
 
@@ -159,8 +197,8 @@ function getLineInfo(layerId, feature) {
       type: 'LineString',
       coordinates: isMeridian
         ? [[degree, -85.0511], [degree, 85.0511]]
-        : [[-180, degree], [180, degree]]
-    }
+        : [[-180, degree], [180, degree]],
+    },
   };
 
   return { uniqueId, highlightFeature };
@@ -170,29 +208,27 @@ function removeHighlightLine(uniqueId) {
   const info = highlightedLines.get(uniqueId);
   if (!info) return;
 
-  highlightedLinePopups.get(uniqueId)?.remove();
-  highlightedLinePopups.delete(uniqueId);
+  linePopups.remove(uniqueId);
 
   if (map.getLayer(info.layerId))   map.removeLayer(info.layerId);
   if (map.getSource(info.sourceId)) map.removeSource(info.sourceId);
   highlightedLines.delete(uniqueId);
 }
 
-function addHighlightLine(uniqueId, highlightFeature, lngLat) {
+function addHighlightLine(uniqueId, highlightFeature) {
   const hlLayerId  = `highlight-line-${uniqueId}`;
   const hlSourceId = `highlight-source-${uniqueId}`;
 
   map.addSource(hlSourceId, { type: 'geojson', data: highlightFeature });
-  map.addLayer({ id: hlLayerId, type: 'line', source: hlSourceId,
-    paint: { 'line-color': '#ff7171', 'line-width': 1.5 } });
+  map.addLayer({
+    id: hlLayerId,
+    type: 'line',
+    source: hlSourceId,
+    paint: { 'line-color': '#ff7171', 'line-width': 1.5 },
+  });
   map.moveLayer(hlLayerId);
 
-  const label = buildLineLabel(uniqueId);
-  const popup = new maplibregl.Popup().setLngLat(lngLat)
-    .setHTML(`<strong>${label}</strong>`).addTo(map);
-
   highlightedLines.set(uniqueId, { layerId: hlLayerId, sourceId: hlSourceId });
-  highlightedLinePopups.set(uniqueId, popup);
 }
 
 function registerLineClickEvents() {
@@ -200,9 +236,7 @@ function registerLineClickEvents() {
     const isDateLine = layerId === 'dateLine-line-hitarea';
 
     map.on('click', layerId, e => {
-      const topFeatures = map.queryRenderedFeatures(e.point, {
-        layers: getLoadedPolygonLayers()
-      });
+      const topFeatures = map.queryRenderedFeatures(e.point, { layers: getLoadedPolygonLayers() });
       if (topFeatures.length > 0 || !e.features.length) return;
 
       if (isDateLine) {
@@ -213,17 +247,15 @@ function registerLineClickEvents() {
       const { uniqueId, highlightFeature } = getLineInfo(layerId, e.features[0]);
 
       if (highlightedLines.has(uniqueId)) {
-        removeHighlightLine(uniqueId);
-        return;
+        linePopups.open(uniqueId, e.lngLat, buildLinePopupHTML(uniqueId));
+      } else {
+        linePopups.closeAllExcept(uniqueId);
+        addHighlightLine(uniqueId, highlightFeature);
       }
-
-      addHighlightLine(uniqueId, highlightFeature, e.lngLat);
     });
 
     map.on('mousemove', layerId, e => {
-      const topFeatures = map.queryRenderedFeatures(e.point, {
-        layers: getLoadedPolygonLayers()
-      });
+      const topFeatures = map.queryRenderedFeatures(e.point, { layers: getLoadedPolygonLayers() });
       map.getCanvas().style.cursor = topFeatures.length === 0 ? 'pointer' : '';
     });
 
@@ -232,39 +264,43 @@ function registerLineClickEvents() {
 }
 
 export function refreshOpenPopups() {
-  for (const [id, { popup, name, region }] of openCountryPopups) {
-    popup.setHTML(buildCountryPopupHTML(name, region, id));
-  }
-
-  for (const [uniqueId, popup] of highlightedLinePopups) {
-    const newLabel = buildLineLabel(uniqueId);
-    popup.setHTML(`<strong>${newLabel}</strong>`);
-  }
+  countryPopups.refreshHtml((id, { name, region }) => buildCountryPopupHTML(name, region, id));
+  linePopups.refreshHtml(id => buildLinePopupHTML(id));
 }
 
 // ==================
 // 初期化（エントリーポイント）
 // ==================
 
+// リセットボタンの dataset キー → 処理 のマッピング
+const resetHandlers = {
+  featureId: id => {
+    const entry = countryPopups.get(id);
+    if (!entry) return;
+    clearFeature(entry.key, id);
+    countryPopups.remove(id);
+    _updateProgress(_getCurrentRegionQuery());
+  },
+  lineId: id => removeHighlightLine(id),
+};
+
 function registerGlobalResetHandler() {
   document.addEventListener('click', e => {
     const btn = e.target.closest('.popup-reset-btn');
     if (!btn) return;
-    const id = btn.dataset.featureId;
-    const entry = openCountryPopups.get(id);
-    if (!entry) return;
-    clearFeature(entry.key, id);
-    entry.popup.remove();
-    _updateProgress(_getCurrentRegionQuery());
+
+    for (const [datasetKey, handler] of Object.entries(resetHandlers)) {
+      if (btn.dataset[datasetKey]) {
+        handler(btn.dataset[datasetKey]);
+        return;
+      }
+    }
   });
 }
 
-export function initMapEvents(_map, {
-  updateProgress,
-  getCurrentRegionQuery,
-}) {
-  map                  = _map;
-  _updateProgress      = updateProgress;
+export function initMapEvents(_map, { updateProgress, getCurrentRegionQuery }) {
+  map                    = _map;
+  _updateProgress        = updateProgress;
   _getCurrentRegionQuery = getCurrentRegionQuery;
   registerGlobalResetHandler();
 }
