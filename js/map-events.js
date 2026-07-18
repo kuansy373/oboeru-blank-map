@@ -1,4 +1,4 @@
-import { LAYER_KEYS } from './config.js';
+import { LAYER_KEYS, PIN_ICON } from './config.js';
 import { getFeatureId, getRegion } from './utils.js';
 import { getDisplayName, getRegionDisplayName } from './lang.js';
 import { regionColors } from './regions.js';
@@ -34,11 +34,28 @@ function getLoadedPolygonLayers() {
 // ポップアップ
 // ==================
 
-function buildPopup(lngLat, html) {
-  return new maplibregl.Popup({ closeOnClick: false })
+function buildPopup(lngLat, html, id, popups) {
+  const popup = new maplibregl.Popup({ closeOnClick: false })
     .setLngLat(lngLat)
     .setHTML(html)
     .addTo(map);
+
+  const closeBtn = popup.getElement().querySelector('.maplibregl-popup-close-button');
+  if (closeBtn) {
+    const pinBtn = document.createElement('button');
+    pinBtn.className = 'popup-pin-btn';
+    pinBtn.innerHTML = PIN_ICON;
+    pinBtn.addEventListener('click', e => {
+      e.stopPropagation();
+      const entry = popups.get(id);
+      if (!entry) return;
+      entry.pinned = !entry.pinned;
+      pinBtn.classList.toggle('pinned', entry.pinned);
+    });
+    closeBtn.before(pinBtn);
+  }
+
+  return popup;
 }
 
 function createPopupManager() {
@@ -53,19 +70,21 @@ function createPopupManager() {
         popups.get(id).popup.setLngLat(lngLat);
         return;
       }
-      const popup = buildPopup(lngLat, html);
-      popups.set(id, { popup, ...meta });
+      const popup = buildPopup(lngLat, html, id, popups);
+      popups.set(id, { popup, pinned: false, ...meta });
       popup.on('close', () => popups.delete(id));
     },
 
     remove(id) {
-      popups.get(id)?.popup.remove();
+      const entry = popups.get(id);
+      if (!entry || entry.pinned) return;
+      entry.popup.remove();
       popups.delete(id);
     },
 
     closeAllExcept(excludeId = null) {
-      for (const [id, { popup }] of popups) {
-        if (id !== excludeId) popup.remove();
+      for (const [id, { popup, pinned }] of popups) {
+        if (id !== excludeId && !pinned) popup.remove();
       }
     },
 
@@ -247,7 +266,7 @@ function registerLineClickEvents() {
       const { uniqueId, highlightFeature } = getLineInfo(layerId, e.features[0]);
 
       if (highlightedLines.has(uniqueId)) {
-        linePopups.open(uniqueId, e.lngLat, buildLinePopupHTML(uniqueId));
+        linePopups.open(uniqueId, e.lngLat, buildLinePopupHTML(uniqueId), {});
       } else {
         linePopups.closeAllExcept(uniqueId);
         addHighlightLine(uniqueId, highlightFeature);

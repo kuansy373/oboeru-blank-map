@@ -337,6 +337,33 @@ body {
 
 
 
+.popup-pin-btn {
+  position: absolute;
+  top: 1px;
+  left: -5px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.56;
+}
+
+.popup-pin-btn svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.popup-pin-btn :is(.st0, .st1) {
+  stroke: #333;
+  stroke-width: 8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.popup-pin-btn .st0 { fill: none; }
+.popup-pin-btn.pinned .st0 { fill: #333; }
+
+
 .popup-content {
   font-size: 12px;
 }

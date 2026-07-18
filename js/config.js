@@ -49,3 +49,11 @@ export const COPY_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="
   <rect x="9" y="9" width="13" height="13" rx="2"/>
   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
 </svg>`;
+
+export const PIN_ICON = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="95 80 115 145">
+<g transform="translate(305, 0) scale(-1, 1)">
+  <path class="st0" d="M168.14,181.73c-7.37-32.32,3.25-65.79,9.66-62.64l8.08,3.98l6.52-13.25L149.8,88.85l-6.52,13.25l8.08,3.98
+    c5.09,2.93-17.88,31.72-43.75,45.85L168.14,181.73z"/>
+  <line class="st1" x1="116.06" y1="211.15" x2="136.59" y2="169.43"/>
+</g>
+</svg>`;
