@@ -148,6 +148,20 @@ export const commands = [
       domRefs.locDisplay.style.fontSize = '';
     },
   },
+  {
+    name: 'pp',
+    pattern: /;pp[,;]?/,
+    apply(_token) {
+      document.querySelectorAll('.popup-pin-btn').forEach(btn => {
+        btn.classList.remove('popup-pin-btn--hidden');
+      });
+    },
+    reset() {
+      document.querySelectorAll('.popup-pin-btn').forEach(btn => {
+        btn.classList.add('popup-pin-btn--hidden');
+      });
+    },
+  },
 ];
 
 // ==================
@@ -210,9 +224,10 @@ export function buildActiveCommandsString() {
 }
 
 // ==================
-// ドラッグモード: 外部からの状態参照・値更新
+// 外部からの状態参照・値更新
 // ==================
 
+// ドラッグモード
 export function isZoomYMode() {
   return zmYMode;
 }
@@ -241,6 +256,12 @@ export function updateZoomYValue(newVal) {
 
 export function updateZoomXValue(newVal) {
   return updateZoomAxisValue('x', newVal);
+}
+
+// ポップアップ固定ボタン
+export function isPinPopupMode() {
+  const raw = domRefs?.searchInput?.value ?? '';
+  return /;pp[,;]?/.test(raw);
 }
 
 // ==================

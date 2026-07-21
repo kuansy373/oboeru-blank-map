@@ -1,6 +1,7 @@
 import { LAYER_KEYS, PIN_ICON } from './config.js';
 import { getFeatureId, getRegion } from './utils.js';
 import { getDisplayName, getRegionDisplayName } from './lang.js';
+import { isPinPopupMode } from './commands.js';
 import { regionColors } from './regions.js';
 import { geojsonData, filledFeatures, fillFeature, clearFeature, getCurrentLayerOrder } from './map-layers.js';
 
@@ -44,6 +45,7 @@ function buildPopup(lngLat, html, id, popups) {
   if (closeBtn) {
     const pinBtn = document.createElement('button');
     pinBtn.className = 'popup-pin-btn';
+    if (!isPinPopupMode()) pinBtn.classList.add('popup-pin-btn--hidden');
     pinBtn.innerHTML = PIN_ICON;
     pinBtn.addEventListener('click', e => {
       e.stopPropagation();

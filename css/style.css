@@ -347,6 +347,10 @@ body {
   opacity: 0.56;
 }
 
+.popup-pin-btn--hidden {
+  display: none;
+}
+
 .popup-pin-btn svg {
   width: 14px;
   height: 14px;
