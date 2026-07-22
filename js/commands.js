@@ -34,7 +34,7 @@ function applySizeOpacityPart(part, state) {
 export const commands = [
   {
     name: 'zm',
-    pattern: /;zm(\.[lr]|\.y-?\d*(\.\d+)?|\.x-?\d*(\.\d+)?|\.[whso]\d+(\.\d+)?)*[,;]?/,
+    pattern: /;zm(\.[^,;\s]+)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
 
@@ -99,7 +99,7 @@ export const commands = [
   },
   {
     name: 'aim',
-    pattern: /;aim(\.[whso]\d+(\.\d+)?)*[,;]?/,
+    pattern: /;aim(\.[^,;\s]+)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
       const size = { w: 24, h: 24, opacity: 1 };
@@ -121,7 +121,7 @@ export const commands = [
   },
   {
     name: 'loc',
-    pattern: /;loc(\.s\d+(\.\d+)?|\.d\d+)*[,;]?/,
+    pattern: /;loc(\.[^,;\s]+)*[,;]?/,
     apply(token) {
       const parts = tokenToParts(token);
       let digits = 0;
