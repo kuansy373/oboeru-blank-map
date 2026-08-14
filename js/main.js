@@ -1,3 +1,4 @@
+import { maplibregl } from './lib.js';
 import { setLang, updateButtonTexts } from './lang.js';
 import { initCommands, commands, parseInput, getCurrentRegionQuery, applyCommands, isZoomYMode, updateZoomYValue, isZoomXMode, updateZoomXValue } from './commands.js';
 import { initMapLayers } from './map-layers.js';

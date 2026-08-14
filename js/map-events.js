@@ -1,3 +1,4 @@
+import { maplibregl } from './lib.js';
 import { LAYER_KEYS, PIN_ICON } from './config.js';
 import { getFeatureId, getRegion } from './utils.js';
 import { getDisplayName, getRegionDisplayName } from './lang.js';
