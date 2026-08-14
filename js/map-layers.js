@@ -1,3 +1,4 @@
+import { turf } from './lib.js';
 import { LAYER_Z_INDEX, LAYER_KEYS, REGION_TO_SOURCE, GRID_KEYS, ZOOM_LEVELS, themes } from './config.js';
 import { normalize, getRegion, getFeatureId } from './utils.js';
 import { geoPaths } from './regions.js';

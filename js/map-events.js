@@ -6,8 +6,6 @@ import { isPinPopupMode } from './commands.js';
 import { regionColors } from './regions.js';
 import { geojsonData, filledFeatures, fillFeature, clearFeature, getCurrentLayerOrder } from './map-layers.js';
 
-// maplibregl → CDN（グローバル）
-
 let map;
 let _updateProgress;
 let _getCurrentRegionQuery;
